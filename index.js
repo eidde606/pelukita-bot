@@ -39,6 +39,8 @@ app.post("/webhook", async (req, res) => {
       if (event.message && event.message.text) {
         const message = event.message.text;
 
+        console.log("Incoming message:", message);
+
         // Example: echo back
         await axios.post(
           `https://graph.facebook.com/v18.0/me/messages?access_token=${process.env.PAGE_ACCESS_TOKEN}`,
