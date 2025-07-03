@@ -2,10 +2,16 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const axios = require("axios");
 const dotenv = require("dotenv");
+const { Configuration, OpenAIApi } = require("openai");
 
 dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+const configuration = new Configuration({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+const openai = new OpenAIApi(configuration);
 
 app.use(bodyParser.json());
 
@@ -42,22 +48,45 @@ app.post("/webhook", async (req, res) => {
       const senderId = event.sender.id;
 
       if (event.message && event.message.text) {
-        const message = event.message.text;
-        console.log("💬 Incoming message:", message);
+        const userMessage = event.message.text;
+        console.log("💬 Incoming message:", userMessage);
+
+        let botReply = "Lo siento, algo salió mal...";
+
+        try {
+          const completion = await openai.createChatCompletion({
+            model: "gpt-4", // Or "gpt-3.5-turbo" for cheaper
+            messages: [
+              {
+                role: "system",
+                content:
+                  "You are Pelukita, a friendly kids party clown. Respond cheerfully, and sometimes in Spanglish!",
+              },
+              {
+                role: "user",
+                content: userMessage,
+              },
+            ],
+          });
+
+          botReply = completion.data.choices[0].message.content;
+        } catch (err) {
+          console.error("❌ OpenAI error:", err.response?.data || err.message);
+        }
 
         try {
           await axios.post(
             `https://graph.facebook.com/v18.0/me/messages?access_token=${process.env.PAGE_ACCESS_TOKEN}`,
             {
               recipient: { id: senderId },
-              message: { text: `Pelukita says: ${message}` },
+              message: { text: botReply },
             }
           );
-          console.log("✅ Response sent to user:", senderId);
-        } catch (error) {
+          console.log("✅ AI reply sent to user:", senderId);
+        } catch (err) {
           console.error(
             "❌ Error sending message:",
-            error.response?.data || error.message
+            err.response?.data || err.message
           );
         }
       }
