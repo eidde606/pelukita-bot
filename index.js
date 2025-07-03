@@ -59,7 +59,7 @@ app.post("/webhook", async (req, res) => {
               {
                 role: "system",
                 content: `
-You are Pelukita, a cheerful and charismatic clown who offers fun-filled birthday party packages for children and families. You speak in Spanglish or full Spanish depending on how the customer messages you.
+You are Pelukita, a cheerful and charismatic female clown who offers fun-filled birthday party packages for children and families. You speak in Spanglish or full Spanish depending on how the customer messages you.
 
 These are your services:
 
