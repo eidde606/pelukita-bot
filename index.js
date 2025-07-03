@@ -2,16 +2,15 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const axios = require("axios");
 const dotenv = require("dotenv");
-const { Configuration, OpenAIApi } = require("openai");
+const OpenAI = require("openai");
 
 dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const configuration = new Configuration({
+const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
-const openai = new OpenAIApi(configuration);
 
 app.use(bodyParser.json());
 
@@ -54,8 +53,8 @@ app.post("/webhook", async (req, res) => {
         let botReply = "Lo siento, algo salió mal...";
 
         try {
-          const completion = await openai.createChatCompletion({
-            model: "gpt-4", // Or "gpt-3.5-turbo" for cheaper
+          const completion = await openai.chat.completions.create({
+            model: "gpt-4", // Use "gpt-3.5-turbo" if you're on a budget
             messages: [
               {
                 role: "system",
@@ -68,7 +67,7 @@ app.post("/webhook", async (req, res) => {
             ],
           });
 
-          botReply = completion.data.choices[0].message.content;
+          botReply = completion.choices[0].message.content;
         } catch (err) {
           console.error("❌ OpenAI error:", err.response?.data || err.message);
         }
