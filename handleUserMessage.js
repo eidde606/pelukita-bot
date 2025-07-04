@@ -15,24 +15,13 @@ async function handleUserMessage(senderId, userMessage) {
   const { stage, data } = session;
   const lowerMessage = userMessage.trim().toLowerCase();
 
-  // Detect simple greeting
   const greetings = ["hola", "hello", "buenas", "hey"];
-  if (greetings.includes(lowerMessage)) {
-    if (stage === "name") {
-      return "👋 ¡Hola! ¿Cuál es tu nombre, por favor?";
-    } else {
-      return "👋 ¡Hola de nuevo! Sigamos donde nos quedamos.";
-    }
-  }
-
-  // Detect interest in packages
   const askingForPackages =
     lowerMessage.includes("paquete") ||
     lowerMessage.includes("pelukines") ||
     lowerMessage.includes("pelukones") ||
     lowerMessage.includes("diferencia");
 
-  // Booking flow control
   const nextStage = {
     name: "date",
     date: "time",
@@ -44,8 +33,29 @@ async function handleUserMessage(senderId, userMessage) {
     notes: "confirm",
   };
 
-  // Handle booking input
-  if (stage !== "confirm" && nextStage[stage]) {
+  // Greet properly without advancing stage
+  if (greetings.includes(lowerMessage)) {
+    if (stage === "name") {
+      return "👋 ¡Hola! ¿Cuál es tu nombre, por favor?";
+    } else {
+      const followUp = {
+        date: "📅 ¿Qué fecha es la fiesta?",
+        time: "⏰ ¿A qué hora comenzará?",
+        service: "🎁 ¿Qué paquete deseas? Pelukines o Pelukones?",
+        price: "💰 ¿Cuál es el precio que se acordó?",
+        phone: "📱 ¿Cuál es tu número de teléfono?",
+        address: "📍 ¿Dónde será la fiesta?",
+        notes: "📝 ¿Algo más que Pelukita deba saber?",
+      };
+      return `👋 ¡Hola de nuevo! ${followUp[stage] || ""}`.trim();
+    }
+  }
+
+  // Don’t advance if they’re just asking about paquetes
+  if (askingForPackages) {
+    // Let AI handle it below
+  } else if (stage !== "confirm" && nextStage[stage]) {
+    // Save input and advance stage
     session.data[stage] = userMessage;
     session.stage = nextStage[stage];
     await session.save();
@@ -79,14 +89,14 @@ async function handleUserMessage(senderId, userMessage) {
         session.data
       )}\n\n📞 Te contactaremos pronto. ¡Va a ser una fiesta brutal! 🎈🥳`;
     default:
-      // AI fallback – includes paquetes info
+      // Let AI handle general questions and paquete explanations
       const response = await openai.chat.completions.create({
         model: "gpt-4",
         messages: [
           {
             role: "system",
             content: `
-You are Pelukita, a joyful and charismatic clown who offers fun birthday experiences. If the user asks about your services, explain clearly in Spanglish or Spanish based on their style. If they’re in the middle of booking, answer kindly but don’t break the flow unless they request info.
+You are Pelukita, a joyful and charismatic female clown who offers fun birthday experiences. If the user asks about your services, explain clearly in Spanglish or Spanish based on their style. If they’re in the middle of booking, answer kindly but don’t break the flow unless they request info.
 
 Services:
 
