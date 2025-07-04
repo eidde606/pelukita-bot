@@ -11,10 +11,7 @@ const Session = require("./Session");
 dotenv.config();
 
 mongoose
-  .connect(process.env.MONGODB_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  })
+  .connect(process.env.MONGODB_URI)
   .then(() => console.log("✅ Connected to MongoDB"))
   .catch((err) => console.error("❌ MongoDB connection error:", err));
 
@@ -45,8 +42,6 @@ app.get("/webhook", (req, res) => {
 });
 
 app.post("/webhook", async (req, res) => {
-  console.log("🔔 Webhook triggered:", JSON.stringify(req.body, null, 2));
-
   const body = req.body;
 
   if (body.object === "page") {
@@ -56,26 +51,24 @@ app.post("/webhook", async (req, res) => {
 
       if (event.message && event.message.text) {
         const userMessage = event.message.text.trim();
-        console.log("💬 Incoming message:", userMessage);
-
-        let botReply = "Lo siento, algo salió mal...";
+        let botReply =
+          "😓 Lo siento, no entendí eso. ¿Podrías repetirlo de otra manera?";
 
         try {
           let session = await Session.findOne({ senderId });
-          if (!session) {
-            session = new Session({ senderId, data: {}, stage: "initial" });
-          }
+          if (!session)
+            session = new Session({ senderId, data: {}, stage: "init" });
 
-          const stage = session.stage;
-          const data = session.data || {};
-
-          // Determine intent
-          const intentCheck = await openai.chat.completions.create({
+          const extract = await openai.chat.completions.create({
             model: "gpt-4",
             messages: [
               {
                 role: "system",
-                content: `You are a friendly assistant. Identify the user's intent based on their message. Reply with one word: greeting, ask_services, ask_packages, start_booking, provide_info, unknown.`,
+                content: `You're a JSON extractor. Given a message about Pelukita bookings, extract:
+{
+  name, date (YYYY-MM-DD), time (HH:MM AM/PM), phone, address, service (Pelukines/Pelukones), notes
+}
+Missing = null.`,
               },
               {
                 role: "user",
@@ -84,41 +77,40 @@ app.post("/webhook", async (req, res) => {
             ],
           });
 
-          const intent = intentCheck.choices[0].message.content
-            .trim()
-            .toLowerCase();
+          const extracted = JSON.parse(extract.choices[0].message.content);
+          const fields = [
+            "name",
+            "date",
+            "time",
+            "phone",
+            "address",
+            "service",
+            "notes",
+          ];
+          const data = session.data;
 
-          if (intent === "greeting") {
-            botReply = `¡Hola, hola! 🎈🎉 ¿Cómo puedo alegrar tu día? ¿Estás buscando dar una sorpresa especial o pensando en una fiesta divertidísima? 🎁🎂`;
-          } else if (intent === "ask_services" || intent === "ask_packages") {
-            botReply = `🎊 ¡Claro! Ofrezco dos paquetes de fiesta llenos de diversión:
+          for (const field of fields) {
+            if (!data[field] && extracted[field]) {
+              data[field] = extracted[field];
+              if (field === "service") {
+                data.price = extracted[field].toLowerCase().includes("pelukon")
+                  ? "$1500"
+                  : "$650";
+              }
+            }
+          }
 
-1️⃣ 🎉 *Paquete Pelukines* – $650 – Ideal para fiestas en casa:
-- 1 hora de pinta caritas
-- 2 horas de show con juegos y concursos
-- Piñata y Happy Birthday 🎂
-- Parlante incluido 🔊
-Adicionales:
-🧸 Muñeco gigante: $60
-🍿 Popcorn o algodón (50): $200
-🎧 DJ (4 horas): $1000
+          session.data = data;
 
-2️⃣ 🎊 *Paquete Pelukones* – $1500 – Ideal para locales:
-- Todo lo de Pelukines
-- Muñeco incluido 🧸
-- Popcorn y algodón incluidos 🍭
-- DJ profesional (4 horas) 🎧
+          const needsHelp = !fields.some((f) => extracted[f]);
 
-¿Quieres reservar alguno o tienes dudas? 🎈`;
-          } else if (intent === "start_booking") {
-            session.stage = "booking";
-
-            const parsed = await openai.chat.completions.create({
+          if (needsHelp) {
+            const answer = await openai.chat.completions.create({
               model: "gpt-4",
               messages: [
                 {
                   role: "system",
-                  content: `You are a data parser. Given a message about booking a clown party, extract and return JSON: name, date (YYYY-MM-DD), time (HH:MM AM/PM), service (Pelukines or Pelukones), phone, address, notes. If unknown, set to null.`,
+                  content: `You are Pelukita, a joyful bilingual party clown. Greet users, answer questions about your services or pricing, and only move to booking if they show interest. NEVER ask for booking details unless they clearly want to book.`,
                 },
                 {
                   role: "user",
@@ -126,62 +118,30 @@ Adicionales:
                 },
               ],
             });
+            botReply = answer.choices[0].message.content;
+          } else {
+            const nextField = fields.find((f) => !data[f]);
 
-            const extracted = JSON.parse(parsed.choices[0].message.content);
-            const fields = [
-              "name",
-              "date",
-              "time",
-              "service",
-              "phone",
-              "address",
-              "notes",
-            ];
-
-            for (const field of fields) {
-              if (!data[field] && extracted[field]) {
-                data[field] = extracted[field];
-                if (field === "service") {
-                  data.price = extracted[field]
-                    .toLowerCase()
-                    .includes("pelukon")
-                    ? "$1500"
-                    : "$650";
-                }
-              }
-            }
-
-            session.data = data;
-
-            const nextMissing = fields.find((f) => !data[f]);
-
-            if (!nextMissing) {
-              const newBooking = new Booking({ ...data });
-              await newBooking.save();
+            if (!nextField) {
+              await Booking.create({ ...data });
               await Session.deleteOne({ senderId });
-              botReply = `✅ ¡Reservación guardada! 🎉 Pelukita te verá el ${data.date} a las ${data.time}. 🥳`;
+              botReply = `🎉 ¡Gracias! Tu reservación para el paquete ${data.service} ha sido confirmada para el ${data.date} a las ${data.time}. 📞 ${data.phone}`;
             } else {
               await session.save();
-              const askPrompt = await openai.chat.completions.create({
+              const prompt = await openai.chat.completions.create({
                 model: "gpt-4",
                 messages: [
                   {
                     role: "system",
-                    content: `You are Pelukita, the party clown. Ask nicely for the missing booking info: ${nextMissing}. Be joyful.`,
+                    content: `You are Pelukita. The user is trying to book a party. Ask nicely for their missing '${nextField}'. Respond in the user's language.`,
                   },
                 ],
               });
-              botReply = askPrompt.choices[0].message.content;
+              botReply = prompt.choices[0].message.content;
             }
-          } else {
-            botReply = `😊 ¡Gracias por tu mensaje! Puedes preguntarme sobre los paquetes, reservar una fiesta, o pedirme información. ¡Estoy aquí para ayudarte! 🎈`;
           }
-
-          await session.save();
         } catch (err) {
           console.error("❌ Error:", err);
-          botReply =
-            "😓 Pelukita no entendió. ¿Podrías repetirlo de otra forma?";
         }
 
         try {
@@ -192,19 +152,15 @@ Adicionales:
               message: { text: botReply },
             }
           );
-          console.log("✅ Bot reply sent to:", senderId);
         } catch (err) {
           console.error("❌ Sending error:", err.response?.data || err.message);
         }
       }
     }
-
     return res.status(200).send("EVENT_RECEIVED");
   } else {
     return res.sendStatus(404);
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`✅ Server is running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`✅ Server is running on port ${PORT}`));
