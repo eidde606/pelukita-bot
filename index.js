@@ -58,17 +58,23 @@ app.post("/webhook", async (req, res) => {
 
       if (event.message && event.message.text) {
         const userMessage = event.message.text.trim();
+        const lowerMsg = userMessage.toLowerCase();
         console.log("💬 Incoming message:", userMessage);
 
         let botReply = "Lo siento, algo salió mal...";
 
         try {
-          const intentClassifier = await openai.chat.completions.create({
+          let session = await Session.findOne({ senderId });
+          if (!session) {
+            session = new Session({ senderId, data: {}, stage: "init" });
+          }
+
+          const userIntent = await openai.chat.completions.create({
             model: "gpt-4",
             messages: [
               {
                 role: "system",
-                content: `You are an intent classifier. Classify the user's message into one of these: greeting, ask_services, booking_intent, general_question, other. Return just the label.`,
+                content: `You are an intent classifier for Pelukita, a party clown. Categorize the message into one of the following: greeting, question, package_interest, booking_intent, or unknown.`,
               },
               {
                 role: "user",
@@ -77,40 +83,55 @@ app.post("/webhook", async (req, res) => {
             ],
           });
 
-          const intent = intentClassifier.choices[0].message.content.trim();
+          const intent = userIntent.choices[0].message.content
+            .toLowerCase()
+            .trim();
 
           if (intent === "greeting") {
             botReply =
               "¡Hola, hola! 🎈🎉 ¿Cómo puedo alegrar tu día? ¿Estás buscando dar una sorpresa especial o pensando en una fiesta divertidísima? 🎁🎂";
-          } else if (intent === "ask_services") {
-            botReply = `🎊 ¡Claro! Ofrezco dos paquetes de fiesta llenos de diversión:
-
-1️⃣ 🎉 *Paquete Pelukines* – $650 – Ideal para fiestas en casa:
-- 1 hora de pinta caritas para todos los niños.
-- 2 horas de show interactivo con juegos y concursos.
-- Canto del Happy Birthday y rompe la piñata.
-- Parlante incluido.
-Adicionales:
-🧸 Muñeco gigante: $60
-🍿 Carrito de popcorn o algodón (50 unidades): $200
-🎧 DJ adicional (4 horas): $1000
-
-2️⃣ 🎊 *Paquete Pelukones* – $1500 – Ideal para fiestas en local:
-- Todo lo incluido en Pelukines
-- Muñeco gigante incluido
-- Carrito de popcorn y algodón (50 unidades)
-- DJ profesional (4 horas)`;
-          } else if (intent === "booking_intent") {
-            let session = await Session.findOne({ senderId });
-            if (!session)
-              session = new Session({ senderId, data: {}, stage: "init" });
-
-            const parserResponse = await openai.chat.completions.create({
+          } else if (intent === "question") {
+            const completion = await openai.chat.completions.create({
               model: "gpt-4",
               messages: [
                 {
                   role: "system",
-                  content: `You are a data parser. Given a message about booking a clown party, extract and return JSON: name, date (YYYY-MM-DD), time (HH:MM AM/PM), service (Pelukines or Pelukones), phone, address, notes. If unknown, set to null.`,
+                  content: `You are Pelukita, a cheerful clown. Answer the customer's question clearly and helpfully, in Spanish, English, or Spanglish depending on their message.`,
+                },
+                {
+                  role: "user",
+                  content: userMessage,
+                },
+              ],
+            });
+            botReply = completion.choices[0].message.content;
+          } else if (intent === "package_interest") {
+            botReply = `🎊 ¡Claro! Ofrezco dos paquetes de fiesta llenos de diversión:
+
+1️⃣ 🎉 *Paquete Pelukines* – $650 – Ideal para fiestas en casa:
+- 1 hora de pinta caritas
+- 2 horas de show con juegos y concursos
+- Piñata y Happy Birthday 🎂
+- Parlante incluido 🔊
+Adicionales:
+🧸 Muñeco gigante: $60
+🍿 Carrito de popcorn o algodón (50): $200
+🎧 DJ (4 horas): $1000
+
+2️⃣ 🎊 *Paquete Pelukones* – $1500 – Ideal para locales:
+- Todo lo de Pelukines
+- Muñeco incluido 🧸
+- Popcorn y algodón incluidos 🍭
+- DJ profesional (4 horas) 🎧
+
+¿Quieres reservar alguno? 🎈`;
+          } else if (intent === "booking_intent") {
+            const parsed = await openai.chat.completions.create({
+              model: "gpt-4",
+              messages: [
+                {
+                  role: "system",
+                  content: `You are a data parser. Given a message about booking a clown party, extract JSON: name, date (YYYY-MM-DD), time (HH:MM AM/PM), service (Pelukines or Pelukones), phone, address, notes. If unknown, set to null.`,
                 },
                 {
                   role: "user",
@@ -119,9 +140,7 @@ Adicionales:
               ],
             });
 
-            const extracted = JSON.parse(
-              parserResponse.choices[0].message.content
-            );
+            const extracted = JSON.parse(parsed.choices[0].message.content);
             const fields = [
               "name",
               "date",
@@ -156,33 +175,20 @@ Adicionales:
               botReply = `✅ ¡Reservación guardada! 🎉 Pelukita te verá el ${data.date} a las ${data.time}. 🥳`;
             } else {
               await session.save();
-              const pelukitaPrompt = await openai.chat.completions.create({
+              const prompt = await openai.chat.completions.create({
                 model: "gpt-4",
                 messages: [
                   {
                     role: "system",
-                    content: `You are Pelukita, a cheerful and charismatic female clown who offers fun-filled birthday party packages. Respond in Spanish/Spanglish/English depending on user's input. Ask nicely for: ${nextMissing}`,
+                    content: `You are Pelukita, a cheerful female clown. Ask kindly for: ${nextMissing}. Respond in Spanish, English, or Spanglish based on user's message.`,
                   },
                 ],
               });
-              botReply = pelukitaPrompt.choices[0].message.content;
+              botReply = prompt.choices[0].message.content;
             }
           } else {
-            // Handle general questions
-            const response = await openai.chat.completions.create({
-              model: "gpt-4",
-              messages: [
-                {
-                  role: "system",
-                  content: `You are Pelukita, a joyful clown who responds kindly and clearly in Spanglish or Spanish or English depending on user language. Provide helpful answers and guide politely.`,
-                },
-                {
-                  role: "user",
-                  content: userMessage,
-                },
-              ],
-            });
-            botReply = response.choices[0].message.content;
+            botReply =
+              "🎈 ¡Hola! ¿Cómo puedo ayudarte hoy con tu fiesta? Puedes preguntarme sobre los paquetes, hacer una reservación o pedirme más información. 😊";
           }
         } catch (err) {
           console.error("❌ Error:", err);
@@ -204,6 +210,7 @@ Adicionales:
         }
       }
     }
+
     return res.status(200).send("EVENT_RECEIVED");
   } else {
     return res.sendStatus(404);
