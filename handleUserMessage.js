@@ -33,6 +33,12 @@ async function handleUserMessage(senderId, userMessage) {
     notes: "confirm",
   };
 
+  const skipAdvance =
+    greetings.includes(lowerMessage) ||
+    askingForPackages ||
+    lowerMessage.includes("?") ||
+    lowerMessage === "no sé";
+
   // Greet properly without advancing stage
   if (greetings.includes(lowerMessage)) {
     if (stage === "name") {
@@ -51,11 +57,8 @@ async function handleUserMessage(senderId, userMessage) {
     }
   }
 
-  // Don’t advance if they’re just asking about paquetes
-  if (askingForPackages) {
-    // Let AI handle it below
-  } else if (stage !== "confirm" && nextStage[stage]) {
-    // Save input and advance stage
+  // Only advance if valid input
+  if (!skipAdvance && stage !== "confirm" && nextStage[stage]) {
     session.data[stage] = userMessage;
     session.stage = nextStage[stage];
     await session.save();
