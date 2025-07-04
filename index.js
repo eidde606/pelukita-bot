@@ -83,7 +83,7 @@ app.post("/webhook", async (req, res) => {
             botReply =
               "🎉 ¡Gracias! Tu reservación ha sido confirmada y guardada exitosamente.";
           } catch (err) {
-            console.error("❌ Error saving booking:", err.message);
+            console.error("❌ Error saving booking:", err);
             botReply = "😓 Lo siento, hubo un error al guardar tu reservación.";
           }
         } else {
