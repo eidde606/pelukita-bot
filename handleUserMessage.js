@@ -1,6 +1,7 @@
 const OpenAI = require("openai");
 const Session = require("./Session");
 const Booking = require("./Booking");
+const sendEmail = require("./sendEmail");
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -75,20 +76,27 @@ Nunca respondas con solo el JSON. Siempre incluye una respuesta natural para el 
   const reply = response.choices[0].message.content;
   const toolCall = extractJson(reply);
 
+  // Save field values progressively
+  if (toolCall?.field && toolCall?.value) {
+    session.data[toolCall.field] = toolCall.value;
+  }
+
+  // Finalize and save booking
   if (toolCall?.action === "finalize") {
     const bookingData = { ...session.data, status: "Booked" };
 
-    // Only save if booking has minimum required fields
     if (
       bookingData.name &&
       bookingData.date &&
       bookingData.time &&
       bookingData.phone &&
-      bookingData.address
+      bookingData.address &&
+      bookingData.email
     ) {
       await Booking.create(bookingData);
-      await sendEmail(toolCall.email, bookingData);
+      await sendEmail(bookingData.email, bookingData);
       await Session.deleteOne({ senderId });
+
       return "🎉 ¡Gracias por reservar con Pelukita! 🎈 Tu evento ha sido guardado con éxito y te hemos enviado un correo de confirmación. ¡Va a ser una fiesta brutal!";
     } else {
       return "⚠️ Algo salió mal. Faltan datos para guardar la reservación. ¿Puedes verificar toda la información?";
