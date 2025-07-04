@@ -110,6 +110,7 @@ Al final, da una despedida feliz Y luego ese bloque JSON.
     paquete: "package",
     adicionales: "extras",
     additionals: "extras",
+    additional: "extras",
     extra: "extras",
     totalprice: "price",
     precio: "price",
