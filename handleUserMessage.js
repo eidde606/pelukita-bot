@@ -224,7 +224,13 @@ Después de recopilar todos, haz un resumen alegre.
       session.data.package,
       session.data.extras
     );
-    if (session.data.price != expectedPrice) {
+
+    const providedPrice = parseInt(
+      session.data.price.toString().replace(/[^\d]/g, ""),
+      10
+    );
+
+    if (providedPrice !== expectedPrice) {
       return `⚠️ El precio proporcionado (${session.data.price}) no coincide con el esperado (${expectedPrice}). ¿Puedes confirmar el paquete y adicionales?`;
     }
 
