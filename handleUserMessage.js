@@ -59,9 +59,15 @@ async function handleUserMessage(senderId, userMessage) {
 
   // Save input and advance only if not a question
   if (!skipAdvance && stage !== "confirm" && nextStage[stage]) {
-    session.data[stage] = userMessage;
-    session.stage = nextStage[stage];
-    await session.save();
+    const isValid =
+      !userMessage.includes("?") &&
+      userMessage.length > 1 &&
+      !greetings.includes(lowerMessage);
+    if (isValid) {
+      session.data[stage] = userMessage;
+      session.stage = nextStage[stage];
+      await session.save();
+    }
   }
 
   // Handle booking flow
