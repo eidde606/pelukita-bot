@@ -59,82 +59,77 @@ app.post("/webhook", async (req, res) => {
 
         let botReply = "Lo siento, algo salió mal...";
 
-        let session = await Session.findOne({ senderId });
-        const data = session?.data || {};
+        const greetingKeywords = ["hola", "hello", "buenas", "hi"];
+        if (greetingKeywords.includes(userMessage.toLowerCase())) {
+          botReply = `🎉 ¡Hola amiguito! ¿En qué puedo ayudarte hoy? 🎈✨ Estoy lista para que planifiquemos la mejor fiesta del mundo. 🥳`;
+        } else {
+          let session = await Session.findOne({ senderId });
+          const data = session?.data || {};
 
-        const stagePrompts = {
-          name: "¿Cuál es tu nombre?",
-          date: "¿Qué día es la fiesta?",
-          time: "¿A qué hora es la fiesta?",
-          service: "¿Qué paquete deseas? (Pelukines o Pelukones)",
-          phone: "¿Cuál es tu número de teléfono?",
-          address: "¿Cuál es la dirección del evento?",
-          notes: "¿Hay alguna nota adicional?",
-        };
+          try {
+            const extracted = await openai.chat.completions.create({
+              model: "gpt-4",
+              messages: [
+                {
+                  role: "system",
+                  content: `You are a data parser. Given any natural sentence from a user about booking a clown party, extract and return a JSON object with the fields: name, date, time, service (Pelukines or Pelukones), phone, address, notes. Dates must be YYYY-MM-DD and time in HH:MM AM/PM. If unknown, return null.`,
+                },
+                {
+                  role: "user",
+                  content: userMessage,
+                },
+              ],
+            });
 
-        try {
-          const extracted = await openai.chat.completions.create({
-            model: "gpt-4",
-            messages: [
-              {
-                role: "system",
-                content: `You are a data parser. Given any natural sentence from a user about booking a clown party, extract and return a JSON object with the fields: name, date, time, service (Pelukines or Pelukones), phone, address, notes. Dates must be YYYY-MM-DD and time in HH:MM AM/PM. If unknown, return null.`,
-              },
-              {
-                role: "user",
-                content: userMessage,
-              },
-            ],
-          });
+            const parsed = JSON.parse(extracted.choices[0].message.content);
+            const fields = [
+              "name",
+              "date",
+              "time",
+              "service",
+              "phone",
+              "address",
+              "notes",
+            ];
 
-          const parsed = JSON.parse(extracted.choices[0].message.content);
-          const fields = Object.keys(stagePrompts);
+            if (!session) {
+              session = new Session({ senderId, data: {}, stage: "name" });
+            }
 
-          if (!session) {
-            session = new Session({ senderId, data: {}, stage: "name" });
-          }
-
-          for (const field of fields) {
-            if (!data[field] && parsed[field]) {
-              data[field] = parsed[field];
-              if (field === "service") {
-                data.price = parsed[field].toLowerCase().includes("pelukon")
-                  ? "$1500"
-                  : "$650";
+            for (const field of fields) {
+              if (!data[field] && parsed[field]) {
+                data[field] = parsed[field];
+                if (field === "service") {
+                  data.price = parsed[field].toLowerCase().includes("pelukon")
+                    ? "$1500"
+                    : "$650";
+                }
               }
             }
-          }
 
-          session.data = data;
+            session.data = data;
+            const nextField = fields.find((f) => !data[f]);
+            session.stage = nextField || "confirm";
+            await session.save();
 
-          const nextField = fields.find((f) => !data[f]);
-
-          if (!nextField) {
-            session.stage = "confirm";
-          } else {
-            session.stage = nextField;
-          }
-
-          await session.save();
-
-          if (session.stage === "confirm") {
-            if (userMessage.toLowerCase() === "confirm") {
-              try {
-                const newBooking = new Booking({ ...data });
-                await newBooking.save();
+            if (session.stage === "confirm") {
+              if (userMessage.toLowerCase() === "confirm") {
+                try {
+                  const newBooking = new Booking({ ...data });
+                  await newBooking.save();
+                  await Session.deleteOne({ senderId });
+                  botReply = `✅ ¡Tu reservación ha sido guardada exitosamente! 🎉 Pelukita está feliz y te verá el día ${data.date} a las ${data.time}. ¡Prepárate para la diversión! 🥳🎈`;
+                } catch (err) {
+                  console.error("❌ Error saving booking:", err);
+                  botReply =
+                    "😓 Lo siento, hubo un error al guardar tu reservación.";
+                }
+              } else if (userMessage.toLowerCase() === "cancel") {
                 await Session.deleteOne({ senderId });
-                botReply = `✅ ¡Tu reservación ha sido guardada exitosamente! 🎉 Pelukita está feliz y te verá el día ${data.date} a las ${data.time}. ¡Prepárate para la diversión! 🥳🎈`;
-              } catch (err) {
-                console.error("❌ Error saving booking:", err);
                 botReply =
-                  "😓 Lo siento, hubo un error al guardar tu reservación.";
-              }
-            } else if (userMessage.toLowerCase() === "cancel") {
-              await Session.deleteOne({ senderId });
-              botReply =
-                "❌ Reservación cancelada. Si deseas comenzar otra vez, solo escribe *hola*.";
-            } else {
-              botReply = `🎉 Aquí está el resumen de tu reservación:
+                  "❌ Reservación cancelada. Si deseas comenzar otra vez, solo escribe *hola*.";
+              } else {
+                botReply = `🎉 Aquí está el resumen de tu reservación:
 
 👤 Nombre: ${data.name}
 📅 Fecha: ${data.date}
@@ -146,14 +141,14 @@ app.post("/webhook", async (req, res) => {
 📝 Notas: ${data.notes}
 
 👉 Escribe *confirm* para guardar o *cancel* para comenzar otra vez.`;
-            }
-          } else {
-            const pelukitaResponse = await openai.chat.completions.create({
-              model: "gpt-4",
-              messages: [
-                {
-                  role: "system",
-                  content: `You are Pelukita, a cheerful and charismatic female clown who offers fun-filled birthday party packages for children and families. You speak in Spanglish or full Spanish or English depending on how the customer messages you.
+              }
+            } else {
+              const pelukitaResponse = await openai.chat.completions.create({
+                model: "gpt-4",
+                messages: [
+                  {
+                    role: "system",
+                    content: `You are Pelukita, a cheerful and charismatic female clown who offers fun-filled birthday party packages for children and families. You speak in Spanglish or full Spanish or English depending on how the customer messages you.
 
 These are your services:
 
@@ -175,22 +170,21 @@ These are your services:
   🎧 DJ profesional (4 horas).
 
 Always respond with joy, emojis, and excitement like a party host. Be helpful, answer customer questions clearly, and guide them through the reservation process.`,
-                },
-                {
-                  role: "user",
-                  content: `Ayúdame a preguntar lo siguiente: "${
-                    stagePrompts[session.stage]
-                  }"`,
-                },
-              ],
-            });
+                  },
+                  {
+                    role: "user",
+                    content: `Ayúdame a preguntar por: ${session.stage}`,
+                  },
+                ],
+              });
 
-            botReply = pelukitaResponse.choices[0].message.content;
+              botReply = pelukitaResponse.choices[0].message.content;
+            }
+          } catch (err) {
+            console.error("❌ OpenAI parsing error:", err);
+            botReply =
+              "😓 Pelukita no entendió. ¿Podrías escribirlo de otra manera?";
           }
-        } catch (err) {
-          console.error("❌ OpenAI parsing error:", err);
-          botReply =
-            "😓 Pelukita no entendió. ¿Podrías escribirlo de otra manera?";
         }
 
         try {
