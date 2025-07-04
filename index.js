@@ -60,33 +60,105 @@ app.post("/webhook", async (req, res) => {
       const senderId = event.sender.id;
 
       if (event.message && event.message.text) {
-        const userMessage = event.message.text;
+        const userMessage = event.message.text.trim();
         console.log("💬 Incoming message:", userMessage);
 
         let botReply = "Lo siento, algo salió mal...";
 
-        // ✅ Quick test: Save a dummy booking if user types "confirm"
-        if (userMessage.toLowerCase().includes("confirm")) {
-          try {
-            const newBooking = new Booking({
-              name: "John Test",
-              date: "2025-08-10",
-              time: "3:00 PM",
-              service: "Pelukines",
-              price: "$650",
-              phone: "804-555-0000",
-              address: "123 Fiesta St, Hopewell, VA",
-              notes: "Test booking from Facebook Messenger",
-            });
+        let session = await Session.findOne({ senderId });
 
-            await newBooking.save();
-            botReply =
-              "🎉 ¡Gracias! Tu reservación ha sido confirmada y guardada exitosamente.";
-          } catch (err) {
-            console.error("❌ Error saving booking:", err);
-            botReply = "😓 Lo siento, hubo un error al guardar tu reservación.";
+        if (session) {
+          const stage = session.stage;
+          const data = session.data || {};
+
+          switch (stage) {
+            case "name":
+              data.name = userMessage;
+              session.stage = "date";
+              botReply = "📅 ¿Qué día es la fiesta? (ej. 2025-08-15)";
+              break;
+
+            case "date":
+              data.date = userMessage;
+              session.stage = "time";
+              botReply = "⏰ ¿A qué hora es la fiesta?";
+              break;
+
+            case "time":
+              data.time = userMessage;
+              session.stage = "service";
+              botReply = "🎈 ¿Qué paquete deseas? (Pelukines o Pelukones)";
+              break;
+
+            case "service":
+              data.service = userMessage;
+              data.price = userMessage.toLowerCase().includes("pelukon")
+                ? "$1500"
+                : "$650";
+              session.stage = "phone";
+              botReply = "📞 ¿Cuál es tu número de teléfono?";
+              break;
+
+            case "phone":
+              data.phone = userMessage;
+              session.stage = "address";
+              botReply = "📍 ¿Cuál es la dirección del evento?";
+              break;
+
+            case "address":
+              data.address = userMessage;
+              session.stage = "notes";
+              botReply = "📝 ¿Alguna nota adicional?";
+              break;
+
+            case "notes":
+              data.notes = userMessage;
+              session.stage = "confirm";
+              botReply = `🎉 Aquí está el resumen de tu reservación:
+
+👤 Nombre: ${data.name}
+📅 Fecha: ${data.date}
+⏰ Hora: ${data.time}
+🎁 Paquete: ${data.service}
+💵 Precio: ${data.price}
+📞 Teléfono: ${data.phone}
+📍 Dirección: ${data.address}
+📝 Notas: ${data.notes}
+
+👉 Escribe *confirm* para guardar o *cancel* para comenzar otra vez.`;
+              break;
+
+            case "confirm":
+              if (userMessage.toLowerCase() === "confirm") {
+                try {
+                  const newBooking = new Booking({ ...data });
+                  await newBooking.save();
+                  await Session.deleteOne({ senderId });
+                  botReply =
+                    "✅ ¡Tu reservación ha sido guardada exitosamente! 🎉 Gracias por confiar en Pelukita.";
+                } catch (err) {
+                  console.error("❌ Error saving booking:", err);
+                  botReply =
+                    "😓 Lo siento, hubo un error al guardar tu reservación.";
+                }
+              } else if (userMessage.toLowerCase() === "cancel") {
+                await Session.deleteOne({ senderId });
+                botReply =
+                  "❌ Reservación cancelada. Si deseas comenzar otra vez, solo escribe *hola*.";
+              } else {
+                botReply =
+                  "❓ Por favor escribe *confirm* para guardar o *cancel* para comenzar otra vez.";
+              }
+              break;
+
+            default:
+              botReply = "❓ No entendí eso. Escribe *cancel* para reiniciar.";
           }
+
+          session.data = data;
+          await session.save();
         } else {
+          // No active session → use OpenAI to reply in character
           try {
             const completion = await openai.chat.completions.create({
               model: "gpt-4",
@@ -126,11 +198,22 @@ Always respond with joy, emojis, and excitement like a party host. Be helpful, a
             });
 
             botReply = completion.choices[0].message.content;
+
+            if (
+              userMessage.toLowerCase().includes("book") ||
+              userMessage.toLowerCase().includes("reservar")
+            ) {
+              const newSession = new Session({ senderId, stage: "name" });
+              await newSession.save();
+              botReply += `\n\n🎉 ¡Vamos a reservar! ¿Cuál es tu nombre?`;
+            }
           } catch (err) {
             console.error(
               "❌ OpenAI error:",
               err.response?.data || err.message
             );
+            botReply =
+              "😅 ¡Ups! Pelukita tuvo un problema entendiendo. Intenta de nuevo.";
           }
         }
 
