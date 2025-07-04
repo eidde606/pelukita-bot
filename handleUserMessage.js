@@ -33,6 +33,7 @@ async function handleUserMessage(senderId, userMessage) {
   };
 
   const followUp = {
+    name: "👤 ¿Cuál es tu nombre?",
     date: "📅 ¿Qué fecha es la fiesta?",
     time: "⏰ ¿A qué hora comenzará?",
     service: "🎁 ¿Qué paquete deseas? Pelukines o Pelukones?",
@@ -42,73 +43,67 @@ async function handleUserMessage(senderId, userMessage) {
     notes: "📝 ¿Algo más que Pelukita deba saber?",
   };
 
-  // Greet without advancing
+  // If greeting, reply nicely but don’t advance
   if (greetings.includes(lowerMessage)) {
     return stage === "name"
       ? "👋 ¡Hola! ¿Cuál es tu nombre, por favor?"
-      : `👋 ¡Hola de nuevo! ${followUp[stage] || ""}`.trim();
+      : `👋 ¡Hola de nuevo! ${followUp[stage] || ""}`;
   }
 
-  // Show paquetes info without advancing
-  if (askingForPackages) {
-    const aiResponse = await openai.chat.completions.create({
+  // If asking about packages, respond using AI and don’t save anything
+  if (askingForPackages || lowerMessage.includes("?")) {
+    const ai = await openai.chat.completions.create({
       model: "gpt-4",
       messages: [
         {
           role: "system",
           content: `
-You are Pelukita, a joyful and charismatic female clown who offers fun birthday experiences. If the user asks about your services, explain clearly in Spanglish or Spanish based on their style.
+You are Pelukita, a joyful and charismatic female clown who offers fun birthday experiences. Only explain services if the user asks about them, and never break the booking flow unless it's a request for info.
 
-🎉 *Paquete Pelukines* – $650 – Ideal para fiestas en casa:
+🎉 *Paquete Pelukines* – $650
 - 1 hora de pinta caritas
-- 2 horas de show interactivo con juegos, piñata, canto de cumpleaños
+- 2 horas de show con juegos y piñata
 - Parlante incluido
-- Extras:
-  🧸 Muñeco gigante: $60
-  🍿 Popcorn o algodón (50 unidades): $200
-  🎧 DJ (4 horas): $1000
+- Add-ons: Muñeco gigante $60, Popcorn $200, DJ $1000
 
-🎊 *Paquete Pelukones* – $1500 – Ideal para fiestas en local:
-- Todo lo del Pelukines más:
-  🧸 Muñeco incluido
-  🍿 Popcorn y algodón incluidos
-  🎧 DJ profesional (4 horas)
-`.trim(),
+🎊 *Paquete Pelukones* – $1500
+- Todo lo del Pelukines +
+- Muñeco + popcorn + DJ profesional (4 hrs)
+        `.trim(),
         },
         { role: "user", content: userMessage },
       ],
     });
 
-    return aiResponse.choices[0].message.content;
+    return ai.choices[0].message.content;
   }
 
-  // Validate input before saving
-  const inputLooksValid = userMessage.length > 2 && !userMessage.includes("?");
+  // ✅ Only save input if it’s NOT a greeting, question, or empty
+  const shouldSave =
+    !greetings.includes(lowerMessage) &&
+    !lowerMessage.includes("?") &&
+    lowerMessage.length >= 2;
 
-  if (stage !== "confirm" && nextStage[stage] && inputLooksValid) {
+  if (shouldSave && stage !== "confirm" && nextStage[stage]) {
     session.data[stage] = userMessage;
     session.stage = nextStage[stage];
     await session.save();
   }
 
-  // Prompt based on current stage
+  // Respond with the next question based on current stage
   switch (session.stage) {
     case "name":
-      return "¿Cuál es tu nombre, por favor?";
+      session.stage = "date";
+      await session.save();
+      return followUp.name;
     case "date":
-      return "📅 ¿Qué fecha es la fiesta?";
     case "time":
-      return "⏰ ¿A qué hora comenzará?";
     case "service":
-      return "🎁 ¿Qué paquete deseas? Pelukines o Pelukones?";
     case "price":
-      return "💰 ¿Cuál es el precio que se acordó?";
     case "phone":
-      return "📱 ¿Cuál es tu número de teléfono?";
     case "address":
-      return "📍 ¿Dónde será la fiesta?";
     case "notes":
-      return "📝 ¿Algo más que Pelukita deba saber?";
+      return followUp[session.stage];
     case "confirm":
       await Booking.create({ ...session.data });
       await Session.deleteOne({ senderId });
@@ -117,7 +112,7 @@ You are Pelukita, a joyful and charismatic female clown who offers fun birthday 
         session.data
       )}\n\n📞 Te contactaremos pronto. ¡Va a ser una fiesta brutal! 🎈🥳`;
     default:
-      return "❓ No entendí muy bien eso. ¿Podrías decirlo de otra forma?";
+      return "¿Puedes repetir eso, por favor?";
   }
 }
 
@@ -131,7 +126,7 @@ function formatSummary(data) {
 📱 Teléfono: ${data.phone || "No especificado"}
 📍 Dirección: ${data.address || "No especificada"}
 📝 Notas: ${data.notes || "Ninguna"}
-`.trim();
+  `.trim();
 }
 
 module.exports = handleUserMessage;
