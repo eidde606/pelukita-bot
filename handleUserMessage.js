@@ -76,7 +76,6 @@ Nunca respondas con solo el JSON. Siempre incluye una respuesta natural para el 
   const reply = response.choices[0].message.content;
   const toolCalls = extractAllJson(reply);
 
-  // Loop through all parsed toolCalls
   for (const toolCall of toolCalls) {
     if (toolCall?.field && toolCall?.value) {
       session.data[toolCall.field] = toolCall.value;
@@ -93,12 +92,18 @@ Nunca respondas con solo el JSON. Siempre incluye una respuesta natural para el 
         bookingData.address &&
         bookingData.email
       ) {
-        await Booking.create(bookingData);
-        await sendEmail(bookingData.email, bookingData);
-        await Session.deleteOne({ senderId });
+        try {
+          await Booking.create(bookingData);
+          await sendEmail(bookingData.email, bookingData);
+          await Session.deleteOne({ senderId });
 
-        return "🎉 ¡Gracias por reservar con Pelukita! 🎈 Tu evento ha sido guardado con éxito y te hemos enviado un correo de confirmación. ¡Va a ser una fiesta brutal!";
+          return "🎉 ¡Gracias por reservar con Pelukita! 🎈 Tu evento ha sido guardado con éxito y te hemos enviado un correo de confirmación. ¡Va a ser una fiesta brutal!";
+        } catch (err) {
+          console.error("❌ Error en la reserva:", err);
+          return "😢 Ocurrió un error al guardar la reservación o enviar el correo. Intenta otra vez o contacta a Pelukita directamente.";
+        }
       } else {
+        console.log("❌ Missing booking fields:", bookingData);
         return "⚠️ Algo salió mal. Faltan datos para guardar la reservación. ¿Puedes verificar toda la información?";
       }
     }
@@ -114,13 +119,19 @@ Nunca respondas con solo el JSON. Siempre incluye una respuesta natural para el 
   return cleaned;
 }
 
-function extractJson(text) {
-  try {
-    const match = text.match(/\{[^}]+\}/);
-    if (match) return JSON.parse(match[0]);
-  } catch (e) {
-    return null;
-  }
+function extractAllJson(text) {
+  const matches = text.match(/\{[^}]+\}/g);
+  if (!matches) return [];
+
+  return matches
+    .map((str) => {
+      try {
+        return JSON.parse(str);
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
 }
 
 module.exports = handleUserMessage;
