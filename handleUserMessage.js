@@ -63,14 +63,16 @@ Tu tarea es recopilar estos datos uno a uno, confirmando después de cada respue
 - Teléfono
 - Correo electrónico
 
-Después que TODOS los datos estén completos, haz un resumen alegre con todos los detalles y pregunta:
-“¿Está todo correcto para finalizar la reservación?”
+Cuando hayas recopilado TODOS los datos, haz un resumen alegre y pregunta si todo está correcto.
 
-Si el cliente responde que sí, entonces y SOLO ENTONCES responde:
+Si el cliente responde algo como “sí”, “todo bien”, “está perfecto”, “correcto”, etc., entonces responde con un mensaje alegre de confirmación FINAL **y** añade al final del mensaje:
 
 { "action": "finalize" }
 
-Nunca lo envíes antes. Siempre da una respuesta natural junto al JSON. Nunca respondas solo con el JSON.
+⚠️ Siempre incluye el JSON de acción exactamente como { "action": "finalize" } al final. Nunca lo olvides.
+
+No repitas el resumen otra vez. Solo una despedida alegre y el JSON de acción al final.
+
 `.trim(),
       },
       ...messages,
