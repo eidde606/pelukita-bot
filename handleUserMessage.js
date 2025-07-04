@@ -7,7 +7,6 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 async function handleUserMessage(senderId, userMessage) {
   let session = await Session.findOne({ senderId });
 
-  // Create new session if not exists
   if (!session) {
     session = await Session.create({ senderId });
   }
@@ -33,57 +32,52 @@ async function handleUserMessage(senderId, userMessage) {
     notes: "confirm",
   };
 
+  const followUp = {
+    date: "📅 ¿Qué fecha es la fiesta?",
+    time: "⏰ ¿A qué hora comenzará?",
+    service: "🎁 ¿Qué paquete deseas? Pelukines o Pelukones?",
+    price: "💰 ¿Cuál es el precio que se acordó?",
+    phone: "📱 ¿Cuál es tu número de teléfono?",
+    address: "📍 ¿Dónde será la fiesta?",
+    notes: "📝 ¿Algo más que Pelukita deba saber?",
+  };
+
   const skipAdvance =
     greetings.includes(lowerMessage) ||
     askingForPackages ||
     lowerMessage.includes("?") ||
     lowerMessage === "no sé";
 
-  // Greet properly without advancing stage
+  // Handle greeting
   if (greetings.includes(lowerMessage)) {
     if (stage === "name") {
       return "👋 ¡Hola! ¿Cuál es tu nombre, por favor?";
     } else {
-      const followUp = {
-        date: "📅 ¿Qué fecha es la fiesta?",
-        time: "⏰ ¿A qué hora comenzará?",
-        service: "🎁 ¿Qué paquete deseas? Pelukines o Pelukones?",
-        price: "💰 ¿Cuál es el precio que se acordó?",
-        phone: "📱 ¿Cuál es tu número de teléfono?",
-        address: "📍 ¿Dónde será la fiesta?",
-        notes: "📝 ¿Algo más que Pelukita deba saber?",
-      };
       return `👋 ¡Hola de nuevo! ${followUp[stage] || ""}`.trim();
     }
   }
 
-  // Only advance if valid input
+  // Save input and advance only if not a question
   if (!skipAdvance && stage !== "confirm" && nextStage[stage]) {
     session.data[stage] = userMessage;
     session.stage = nextStage[stage];
     await session.save();
   }
 
-  // Respond based on current stage
+  // Handle booking flow
   switch (session.stage) {
     case "name":
       session.stage = "date";
       await session.save();
       return "¿Cuál es tu nombre, por favor?";
     case "date":
-      return "📅 ¿Qué fecha es la fiesta?";
     case "time":
-      return "⏰ ¿A qué hora comenzará?";
     case "service":
-      return "🎁 ¿Qué paquete deseas? Pelukines o Pelukones?";
     case "price":
-      return "💰 ¿Cuál es el precio que se acordó?";
     case "phone":
-      return "📱 ¿Cuál es tu número de teléfono?";
     case "address":
-      return "📍 ¿Dónde será la fiesta?";
     case "notes":
-      return "📝 ¿Algo más que Pelukita deba saber?";
+      return followUp[session.stage];
     case "confirm":
       await Booking.create({ ...session.data });
       await Session.deleteOne({ senderId });
@@ -92,7 +86,6 @@ async function handleUserMessage(senderId, userMessage) {
         session.data
       )}\n\n📞 Te contactaremos pronto. ¡Va a ser una fiesta brutal! 🎈🥳`;
     default:
-      // Let AI handle general questions and paquete explanations
       const response = await openai.chat.completions.create({
         model: "gpt-4",
         messages: [
@@ -127,7 +120,9 @@ Always be cheerful, respond warmly, and only give service info if asked or menti
         ],
       });
 
-      return response.choices[0].message.content;
+      return askingForPackages
+        ? response.choices[0].message.content
+        : `✍️ Gracias! Sigamos con la reservación. ${followUp[stage] || ""}`;
   }
 }
 
