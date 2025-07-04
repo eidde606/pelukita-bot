@@ -62,6 +62,16 @@ app.post("/webhook", async (req, res) => {
         let session = await Session.findOne({ senderId });
         const data = session?.data || {};
 
+        const stagePrompts = {
+          name: "¿Cuál es tu nombre?",
+          date: "¿Qué día es la fiesta?",
+          time: "¿A qué hora es la fiesta?",
+          service: "¿Qué paquete deseas? (Pelukines o Pelukones)",
+          phone: "¿Cuál es tu número de teléfono?",
+          address: "¿Cuál es la dirección del evento?",
+          notes: "¿Hay alguna nota adicional?",
+        };
+
         try {
           const extracted = await openai.chat.completions.create({
             model: "gpt-4",
@@ -78,15 +88,7 @@ app.post("/webhook", async (req, res) => {
           });
 
           const parsed = JSON.parse(extracted.choices[0].message.content);
-          const fields = [
-            "name",
-            "date",
-            "time",
-            "service",
-            "phone",
-            "address",
-            "notes",
-          ];
+          const fields = Object.keys(stagePrompts);
 
           if (!session) {
             session = new Session({ senderId, data: {}, stage: "name" });
@@ -104,8 +106,15 @@ app.post("/webhook", async (req, res) => {
           }
 
           session.data = data;
+
           const nextField = fields.find((f) => !data[f]);
-          session.stage = nextField || "confirm";
+
+          if (!nextField) {
+            session.stage = "confirm";
+          } else {
+            session.stage = nextField;
+          }
+
           await session.save();
 
           if (session.stage === "confirm") {
@@ -169,7 +178,9 @@ Always respond with joy, emojis, and excitement like a party host. Be helpful, a
                 },
                 {
                   role: "user",
-                  content: `Ayúdame a preguntar por: ${session.stage}`,
+                  content: `Ayúdame a preguntar lo siguiente: "${
+                    stagePrompts[session.stage]
+                  }"`,
                 },
               ],
             });
