@@ -63,7 +63,12 @@ Recolecta el siguiente flujo de datos uno a uno:
 - Teléfono
 - Correo electrónico
 
-Cuando el cliente diga que todo está correcto, responde con { "action": "finalize" }. Antes de eso, guarda los campos como { "field": "nombre", "value": "Eddie" }, etc.
+Cuando el cliente confirme que todo está correcto (por ejemplo, si dice "sí", "todo bien", "todo correcto", "está perfecto", "está correcto", etc.), responde con lo siguiente al final del mensaje:
+
+{ "action": "finalize" }
+
+No vuelvas a repetir los datos otra vez. Solo da una respuesta final alegre y luego incluye el JSON de acción. No preguntes otra vez.
+
 
 Nunca respondas con solo el JSON. Siempre incluye una respuesta natural para el cliente.
 `.trim(),
