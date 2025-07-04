@@ -23,6 +23,7 @@ const fieldMap = {
     "kidsnumber",
     "numberofkids",
     "childrenamount",
+    "kids",
   ],
   package: ["package", "paquete"],
   extras: [
@@ -33,9 +34,16 @@ const fieldMap = {
     "addons",
     "extra",
   ],
-  price: ["price", "totalprice", "precio"],
-  phone: ["phone", "teléfono", "telefono"],
-  email: ["email", "correo", "correo_electronico"],
+  price: ["price", "totalprice", "precio", "costo"],
+  phone: [
+    "phone",
+    "teléfono",
+    "telefono",
+    "phonenumber",
+    "número",
+    "numerotelefono",
+  ],
+  email: ["email", "correo", "correo_electronico", "emailaddress"],
 };
 
 function normalizeKey(key) {
