@@ -74,32 +74,33 @@ Nunca respondas con solo el JSON. Siempre incluye una respuesta natural para el 
   });
 
   const reply = response.choices[0].message.content;
-  const toolCall = extractJson(reply);
+  const toolCalls = extractAllJson(reply);
 
-  // Save field values progressively
-  if (toolCall?.field && toolCall?.value) {
-    session.data[toolCall.field] = toolCall.value;
-  }
+  // Loop through all parsed toolCalls
+  for (const toolCall of toolCalls) {
+    if (toolCall?.field && toolCall?.value) {
+      session.data[toolCall.field] = toolCall.value;
+    }
 
-  // Finalize and save booking
-  if (toolCall?.action === "finalize") {
-    const bookingData = { ...session.data, status: "Booked" };
+    if (toolCall?.action === "finalize") {
+      const bookingData = { ...session.data, status: "Booked" };
 
-    if (
-      bookingData.name &&
-      bookingData.date &&
-      bookingData.time &&
-      bookingData.phone &&
-      bookingData.address &&
-      bookingData.email
-    ) {
-      await Booking.create(bookingData);
-      await sendEmail(bookingData.email, bookingData);
-      await Session.deleteOne({ senderId });
+      if (
+        bookingData.name &&
+        bookingData.date &&
+        bookingData.time &&
+        bookingData.phone &&
+        bookingData.address &&
+        bookingData.email
+      ) {
+        await Booking.create(bookingData);
+        await sendEmail(bookingData.email, bookingData);
+        await Session.deleteOne({ senderId });
 
-      return "🎉 ¡Gracias por reservar con Pelukita! 🎈 Tu evento ha sido guardado con éxito y te hemos enviado un correo de confirmación. ¡Va a ser una fiesta brutal!";
-    } else {
-      return "⚠️ Algo salió mal. Faltan datos para guardar la reservación. ¿Puedes verificar toda la información?";
+        return "🎉 ¡Gracias por reservar con Pelukita! 🎈 Tu evento ha sido guardado con éxito y te hemos enviado un correo de confirmación. ¡Va a ser una fiesta brutal!";
+      } else {
+        return "⚠️ Algo salió mal. Faltan datos para guardar la reservación. ¿Puedes verificar toda la información?";
+      }
     }
   }
 
