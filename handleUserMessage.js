@@ -5,6 +5,62 @@ const sendEmail = require("./sendEmail");
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+const fieldMap = {
+  name: ["name", "adultname", "nombre"],
+  birthdayName: ["birthdayname", "nombrenino", "nombrenio", "cumpleañero"],
+  birthdayAge: ["birthdayage", "edad", "age"],
+  date: ["date", "fecha"],
+  time: ["time", "hora"],
+  address: ["address", "dirección", "direccion"],
+  children: [
+    "children",
+    "numberofchildren",
+    "number_of_children",
+    "numero_de_niños",
+    "niños",
+    "numeroniños",
+    "numeroninos",
+    "kidsnumber",
+    "numberofkids",
+    "childrenamount",
+  ],
+  package: ["package", "paquete"],
+  extras: [
+    "extras",
+    "adicionales",
+    "additional",
+    "additionals",
+    "addons",
+    "extra",
+  ],
+  price: ["price", "totalprice", "precio"],
+  phone: ["phone", "teléfono", "telefono"],
+  email: ["email", "correo", "correo_electronico"],
+};
+
+function normalizeKey(key) {
+  const lower = key.toLowerCase().replace(/\s|_/g, "");
+  for (const [standard, aliases] of Object.entries(fieldMap)) {
+    if (aliases.includes(lower)) return standard;
+  }
+  return lower;
+}
+
+function extractAllJson(text) {
+  const jsonMatches = text.match(/\{[^{}]*\}/g) || [];
+  return jsonMatches
+    .map((str) => {
+      try {
+        const parsed = JSON.parse(str);
+        if (parsed.field || parsed.action) return parsed;
+        return null;
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+}
+
 async function handleUserMessage(senderId, userMessage) {
   let session = await Session.findOne({ senderId });
 
@@ -17,6 +73,7 @@ async function handleUserMessage(senderId, userMessage) {
     });
   }
 
+  if (!session.data) session.data = {};
   const messages = session.messages || [];
   messages.push({ role: "user", content: userMessage });
 
@@ -86,38 +143,6 @@ Después de recopilar todos, haz un resumen alegre.
   const toolCalls = extractAllJson(reply);
   console.log("ToolCalls parsed:", toolCalls);
 
-  const normalizeKey = (key) => {
-    const str = key.toLowerCase().replace(/\s|_/g, "");
-    if (str.includes("name") && str.includes("adult")) return "name";
-    if (str.includes("birthdayname")) return "birthdayName";
-    if (str.includes("edad") || str.includes("age")) return "birthdayAge";
-    if (str.includes("fecha") || str.includes("date")) return "date";
-    if (str.includes("hora") || str.includes("time")) return "time";
-    if (str.includes("direccion") || str.includes("address")) return "address";
-    if (
-      str.includes("niño") ||
-      str.includes("kids") ||
-      str.includes("children")
-    )
-      return "children";
-    if (str.includes("paquete") || str.includes("package")) return "package";
-    if (
-      str.includes("extra") ||
-      str.includes("addon") ||
-      str.includes("adicional")
-    )
-      return "extras";
-    if (
-      str.includes("precio") ||
-      str.includes("totalprice") ||
-      str.includes("price")
-    )
-      return "price";
-    if (str.includes("telefono") || str.includes("phone")) return "phone";
-    if (str.includes("correo") || str.includes("email")) return "email";
-    return key;
-  };
-
   for (const toolCall of toolCalls) {
     if (toolCall?.field && toolCall.value !== undefined) {
       const normalized = normalizeKey(toolCall.field);
@@ -126,7 +151,7 @@ Después de recopilar todos, haz un resumen alegre.
   }
 
   const isFinalConfirmation =
-    /^(sí|si|todo bien|está correcto|correcto|está bien|todo está bien|está perfecto|está todo bien)$/i.test(
+    /^(sí|si|ok|vale|correcto|está (correcto|bien|perfecto)|todo (bien|está bien|está perfecto))$/i.test(
       userMessage.trim()
     );
 
@@ -136,7 +161,6 @@ Después de recopilar todos, haz un resumen alegre.
 
   if (finalizeCall) {
     console.log("Session data before creating booking:", session.data);
-
     const requiredFields = [
       "name",
       "birthdayName",
@@ -156,13 +180,17 @@ Después de recopilar todos, haz un resumen alegre.
 
     if (missing.length === 0) {
       const bookingData = { ...session.data, status: "Booked" };
-      console.log("✅ Final bookingData to be saved:", bookingData);
 
-      await Booking.create(bookingData);
-      await sendEmail(bookingData.email, bookingData);
-      await Session.deleteOne({ senderId });
+      try {
+        await Booking.create(bookingData);
+        await sendEmail(bookingData.email, bookingData);
+        await Session.deleteOne({ senderId });
 
-      return "🎉 ¡Gracias por reservar con Pelukita! 🎈 Tu evento ha sido guardado con éxito y te hemos enviado un correo de confirmación. ¡Va a ser una fiesta brutal!";
+        return "🎉 ¡Gracias por reservar con Pelukita! 🎈 Tu evento ha sido guardado con éxito y te hemos enviado un correo de confirmación. ¡Va a ser una fiesta brutal!";
+      } catch (error) {
+        console.error("❌ Error finalizing booking:", error);
+        return "😔 ¡Lo siento! Ocurrió un problema al guardar tu reserva. Por favor, intenta de nuevo o llámanos al 804-735-8835.";
+      }
     } else {
       console.log("❌ Cannot finalize. Missing:", missing);
       return `⚠️ Falta información: ${missing.join(
@@ -180,20 +208,6 @@ Después de recopilar todos, haz un resumen alegre.
     .trim();
 
   return cleaned;
-}
-
-function extractAllJson(text) {
-  const jsonMatches = text.match(/\{[^{}]+\}/g);
-  if (!jsonMatches) return [];
-  return jsonMatches
-    .map((str) => {
-      try {
-        return JSON.parse(str);
-      } catch {
-        return null;
-      }
-    })
-    .filter(Boolean);
 }
 
 module.exports = handleUserMessage;
