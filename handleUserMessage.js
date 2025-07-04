@@ -187,9 +187,34 @@ Después de recopilar todos, haz un resumen alegre.
           input += ` ${new Date().getFullYear()}`;
         }
 
-        const parsedDate = moment(input, ["D MMMM YYYY", "MMMM D YYYY"], true);
-        if (!parsedDate.isValid() || parsedDate.isBefore(moment(), "day")) {
-          return "⚠️ La fecha proporcionada no es válida o está en el pasado. Por favor, ingresa una fecha futura.";
+        let parsedDate = moment(
+          input,
+          [
+            "D MMMM YYYY",
+            "DD MMMM YYYY",
+            "MMMM D YYYY",
+            "MMMM DD YYYY",
+            "D [de] MMMM [de] YYYY",
+            "MMMM [de] D [de] YYYY",
+          ],
+          true
+        );
+
+        if (!parsedDate.isValid()) {
+          const flipped = input.split(" ").reverse().join(" ");
+          parsedDate = moment(
+            flipped,
+            ["D MMMM YYYY", "MMMM D YYYY", "DD MMMM YYYY", "MMMM DD YYYY"],
+            true
+          );
+        }
+
+        // ✅ only reject if user actually just sent a date
+        if (!parsedDate.isValid()) {
+          return "⚠️ La fecha proporcionada no es válida. Por favor, escribe una fecha como '11 de noviembre'.";
+        }
+        if (parsedDate.isBefore(moment(), "day")) {
+          return "⚠️ Esa fecha ya pasó. Por favor, ingresa una fecha futura.";
         }
 
         session.data[normalized] = parsedDate.format("YYYY-MM-DD");
