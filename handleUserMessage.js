@@ -42,48 +42,73 @@ async function handleUserMessage(senderId, userMessage) {
     notes: "📝 ¿Algo más que Pelukita deba saber?",
   };
 
-  const skipAdvance =
-    greetings.includes(lowerMessage) ||
-    askingForPackages ||
-    lowerMessage.includes("?") ||
-    lowerMessage === "no sé";
-
-  // Handle greeting
+  // Greet without advancing
   if (greetings.includes(lowerMessage)) {
-    if (stage === "name") {
-      return "👋 ¡Hola! ¿Cuál es tu nombre, por favor?";
-    } else {
-      return `👋 ¡Hola de nuevo! ${followUp[stage] || ""}`.trim();
-    }
+    return stage === "name"
+      ? "👋 ¡Hola! ¿Cuál es tu nombre, por favor?"
+      : `👋 ¡Hola de nuevo! ${followUp[stage] || ""}`.trim();
   }
 
-  // Save input and advance only if not a question
-  if (!skipAdvance && stage !== "confirm" && nextStage[stage]) {
-    const isValid =
-      !userMessage.includes("?") &&
-      userMessage.length > 1 &&
-      !greetings.includes(lowerMessage);
-    if (isValid) {
-      session.data[stage] = userMessage;
-      session.stage = nextStage[stage];
-      await session.save();
-    }
+  // Show paquetes info without advancing
+  if (askingForPackages) {
+    const aiResponse = await openai.chat.completions.create({
+      model: "gpt-4",
+      messages: [
+        {
+          role: "system",
+          content: `
+You are Pelukita, a joyful and charismatic female clown who offers fun birthday experiences. If the user asks about your services, explain clearly in Spanglish or Spanish based on their style.
+
+🎉 *Paquete Pelukines* – $650 – Ideal para fiestas en casa:
+- 1 hora de pinta caritas
+- 2 horas de show interactivo con juegos, piñata, canto de cumpleaños
+- Parlante incluido
+- Extras:
+  🧸 Muñeco gigante: $60
+  🍿 Popcorn o algodón (50 unidades): $200
+  🎧 DJ (4 horas): $1000
+
+🎊 *Paquete Pelukones* – $1500 – Ideal para fiestas en local:
+- Todo lo del Pelukines más:
+  🧸 Muñeco incluido
+  🍿 Popcorn y algodón incluidos
+  🎧 DJ profesional (4 horas)
+`.trim(),
+        },
+        { role: "user", content: userMessage },
+      ],
+    });
+
+    return aiResponse.choices[0].message.content;
   }
 
-  // Handle booking flow
+  // Validate input before saving
+  const inputLooksValid = userMessage.length > 2 && !userMessage.includes("?");
+
+  if (stage !== "confirm" && nextStage[stage] && inputLooksValid) {
+    session.data[stage] = userMessage;
+    session.stage = nextStage[stage];
+    await session.save();
+  }
+
+  // Prompt based on current stage
   switch (session.stage) {
     case "name":
-      session.stage = "date";
-      await session.save();
       return "¿Cuál es tu nombre, por favor?";
     case "date":
+      return "📅 ¿Qué fecha es la fiesta?";
     case "time":
+      return "⏰ ¿A qué hora comenzará?";
     case "service":
+      return "🎁 ¿Qué paquete deseas? Pelukines o Pelukones?";
     case "price":
+      return "💰 ¿Cuál es el precio que se acordó?";
     case "phone":
+      return "📱 ¿Cuál es tu número de teléfono?";
     case "address":
+      return "📍 ¿Dónde será la fiesta?";
     case "notes":
-      return followUp[session.stage];
+      return "📝 ¿Algo más que Pelukita deba saber?";
     case "confirm":
       await Booking.create({ ...session.data });
       await Session.deleteOne({ senderId });
@@ -92,43 +117,7 @@ async function handleUserMessage(senderId, userMessage) {
         session.data
       )}\n\n📞 Te contactaremos pronto. ¡Va a ser una fiesta brutal! 🎈🥳`;
     default:
-      const response = await openai.chat.completions.create({
-        model: "gpt-4",
-        messages: [
-          {
-            role: "system",
-            content: `
-You are Pelukita, a joyful and charismatic female clown who offers fun birthday experiences. If the user asks about your services, explain clearly in Spanglish or Spanish based on their style. If they’re in the middle of booking, answer kindly but don’t break the flow unless they request info.
-
-Services:
-
-🎉 *Paquete Pelukines* – $650 – Ideal para fiestas en casa:
-- 1 hora de pinta caritas para todos los niños.
-- 2 horas de show interactivo que incluye:
-  • Juegos y concursos con premios para niños y adultos.
-  • Rompe la piñata y canto del Happy Birthday.
-- Parlante incluido.
-- Adicionales:
-  🧸 Muñeco gigante: $60 (Mario, Luigi, Mickey, Minnie, Plin Plin, Zenon)
-  🍿 Carrito de popcorn o algodón de azúcar (50 unidades): $200
-  🎧 DJ adicional (4 horas): $1000
-
-🎊 *Paquete Pelukones* – $1500 – Ideal para fiestas en local:
-- Todo lo incluido en Pelukines MÁS:
-  🧸 Muñeco gigante incluido
-  🍭 Popcorn y algodón incluidos (50 unidades)
-  🎧 DJ profesional (4 horas)
-
-Always be cheerful, respond warmly, and only give service info if asked or mentioned. Never assume they want a booking unless they say so.
-            `.trim(),
-          },
-          { role: "user", content: userMessage },
-        ],
-      });
-
-      return askingForPackages
-        ? response.choices[0].message.content
-        : `✍️ Gracias! Sigamos con la reservación. ${followUp[stage] || ""}`;
+      return "❓ No entendí muy bien eso. ¿Podrías decirlo de otra forma?";
   }
 }
 
@@ -142,7 +131,7 @@ function formatSummary(data) {
 📱 Teléfono: ${data.phone || "No especificado"}
 📍 Dirección: ${data.address || "No especificada"}
 📝 Notas: ${data.notes || "Ninguna"}
-  `.trim();
+`.trim();
 }
 
 module.exports = handleUserMessage;
