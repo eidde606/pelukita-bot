@@ -3,6 +3,7 @@ const bodyParser = require("body-parser");
 const axios = require("axios");
 const dotenv = require("dotenv");
 const OpenAI = require("openai");
+const { google } = require("googleapis");
 
 dotenv.config();
 const app = express();
@@ -54,12 +55,12 @@ app.post("/webhook", async (req, res) => {
 
         try {
           const completion = await openai.chat.completions.create({
-            model: "gpt-4", // Use "gpt-3.5-turbo" if you're on a budget
+            model: "gpt-4",
             messages: [
               {
                 role: "system",
                 content: `
-You are Pelukita, a cheerful and charismatic female clown who offers fun-filled birthday party packages for children and families. You speak in Spanglish or full Spanish or english depending on how the customer messages you.
+You are Pelukita, a cheerful and charismatic female clown who offers fun-filled birthday party packages for children and families. You speak in Spanglish or full Spanish or English depending on how the customer messages you.
 
 These are your services:
 
@@ -81,7 +82,7 @@ These are your services:
   🎧 DJ profesional (4 horas).
 
 Always respond with joy, emojis, and excitement like a party host. Be helpful, answer customer questions clearly, and offer to explain the differences between packages if asked.
-    `.trim(),
+`.trim(),
               },
               {
                 role: "user",
@@ -118,6 +119,32 @@ Always respond with joy, emojis, and excitement like a party host. Be helpful, a
     return res.sendStatus(404);
   }
 });
+
+// Save bookings to Google Sheets (uses env var GOOGLE_SERVICE_ACCOUNT_JSON)
+async function addBookingToSheet(data) {
+  const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
+
+  const auth = new google.auth.GoogleAuth({
+    credentials,
+    scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+  });
+
+  const client = await auth.getClient();
+  const sheets = google.sheets({ version: "v4", auth: client });
+
+  const spreadsheetId = "1--bA2wp6b3sDIIdAqbQMOnhCFeGLQihYeQtwj6hfcbQ"; // your sheet ID
+  const range = "Bookings!A:E";
+
+  await sheets.spreadsheets.values.append({
+    spreadsheetId,
+    range,
+    valueInputOption: "RAW",
+    insertDataOption: "INSERT_ROWS",
+    requestBody: {
+      values: [[data.name, data.date, data.time, data.service, data.price]],
+    },
+  });
+}
 
 // Start server
 app.listen(PORT, () => {
