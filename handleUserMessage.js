@@ -64,6 +64,7 @@ Después de recopilar todos, haz un resumen alegre.
 
 ⚠️ Si el cliente responde con algo como “sí”, “todo bien”, “correcto”, etc., repite toda la información que recopilaste en este formato exacto:
 
+\`\`\`json
 [
   { "field": "name", "value": "Eddie" },
   { "field": "birthdayName", "value": "Lucas" },
@@ -71,8 +72,9 @@ Después de recopilar todos, haz un resumen alegre.
   ...
   { "action": "finalize" }
 ]
+\`\`\`
 
-✅ NO OMITAS NINGUNO. NUNCA pongas solo { "action": "finalize" } sin los otros campos.
+✅ NO OMITAS NINGUNO. NUNCA pongas solo \`{ "action": "finalize" }\` sin los otros campos.
 
 Al final, da una despedida feliz Y luego ese bloque JSON.
 `.trim(),
@@ -86,44 +88,41 @@ Al final, da una despedida feliz Y luego ese bloque JSON.
   const toolCalls = extractAllJson(reply);
   console.log("ToolCalls parsed:", toolCalls);
 
-  // Normalize Spanish keys
+  // Normalize Spanish + GPT variations
   const fieldMap = {
     nombre: "name",
-    nombre_adulto: "name",
+    nombreadulto: "name",
     cumpleañero: "birthdayName",
+    birthdayname: "birthdayName",
     edad: "birthdayAge",
     fecha: "date",
     hora: "time",
-    dirección: "address",
     direccion: "address",
+    dirección: "address",
     niños: "children",
-    numeroninos: "children",
-    numerodeninos: "children",
     numberofkids: "children",
-    childrenamount: "children",
-
+    kidsnumber: "children",
     paquete: "package",
-    adicionales: "extras",
-    adicional: "extras",
-    extras: "extras",
-    paquete: "package",
+    additional: "extras",
     adicionales: "extras",
     precio: "price",
-    teléfono: "phone",
+    preciototal: "price",
+    totalprice: "price",
     telefono: "phone",
+    teléfono: "phone",
     correo: "email",
-    correo_electronico: "email",
+    correoelectronico: "email",
   };
 
   for (const toolCall of toolCalls) {
     if (toolCall?.field && toolCall?.value) {
-      const normalized =
-        fieldMap[toolCall.field.toLowerCase()] || toolCall.field;
+      const key = toolCall.field.toLowerCase().replace(/\s|_/g, "");
+      const normalized = fieldMap[key] || toolCall.field;
       session.data[normalized] = toolCall.value;
     }
   }
 
-  // Fallback: detect confirmation in plain text if GPT forgot to include finalize
+  // Fallback: detect confirmation if GPT forgot to include finalize
   const isFinalConfirmation =
     /^(sí|si|todo bien|está correcto|correcto|está bien|todo está bien|está perfecto|está todo bien)$/i.test(
       userMessage.trim()
@@ -150,6 +149,7 @@ Al final, da una despedida feliz Y luego ese bloque JSON.
       "phone",
       "email",
     ];
+
     const missing = requiredFields.filter((field) => !session.data[field]);
 
     if (missing.length === 0) {
