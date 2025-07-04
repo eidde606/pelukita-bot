@@ -75,8 +75,6 @@ Después de recopilar todos, haz un resumen alegre.
 \`\`\`
 
 ✅ NO OMITAS NINGUNO. NUNCA pongas solo \`{ "action": "finalize" }\` sin los otros campos.
-
-Al final, da una despedida feliz Y luego ese bloque JSON.
 `.trim(),
       },
       ...messages,
@@ -88,48 +86,45 @@ Al final, da una despedida feliz Y luego ese bloque JSON.
   const toolCalls = extractAllJson(reply);
   console.log("ToolCalls parsed:", toolCalls);
 
-  // Normalize Spanish + GPT variations
-  const fieldMap = {
-    nombre: "name",
-    nombre_adulto: "name",
-    cumpleañero: "birthdayName",
-    edad: "birthdayAge",
-    fecha: "date",
-    hora: "time",
-    dirección: "address",
-    direccion: "address",
-    niños: "children",
-    numero_de_niños: "children",
-    numeroniños: "children",
-    numeroninos: "children",
-    numberofchildren: "children",
-    number_of_children: "children",
-    childrenamount: "children",
-    kidsnumber: "children",
-    numberofkids: "children",
-    paquete: "package",
-    adicionales: "extras",
-    additionals: "extras",
-    additional: "extras",
-    addons: "extras",
-    extra: "extras",
-    totalprice: "price",
-    precio: "price",
-    teléfono: "phone",
-    telefono: "phone",
-    correo: "email",
-    correo_electronico: "email",
+  const normalizeKey = (key) => {
+    const str = key.toLowerCase().replace(/\s|_/g, "");
+    if (str.includes("name") && str.includes("adult")) return "name";
+    if (str.includes("birthdayname")) return "birthdayName";
+    if (str.includes("edad") || str.includes("age")) return "birthdayAge";
+    if (str.includes("fecha") || str.includes("date")) return "date";
+    if (str.includes("hora") || str.includes("time")) return "time";
+    if (str.includes("direccion") || str.includes("address")) return "address";
+    if (
+      str.includes("niño") ||
+      str.includes("kids") ||
+      str.includes("children")
+    )
+      return "children";
+    if (str.includes("paquete") || str.includes("package")) return "package";
+    if (
+      str.includes("extra") ||
+      str.includes("addon") ||
+      str.includes("adicional")
+    )
+      return "extras";
+    if (
+      str.includes("precio") ||
+      str.includes("totalprice") ||
+      str.includes("price")
+    )
+      return "price";
+    if (str.includes("telefono") || str.includes("phone")) return "phone";
+    if (str.includes("correo") || str.includes("email")) return "email";
+    return key;
   };
 
   for (const toolCall of toolCalls) {
     if (toolCall?.field && toolCall?.value) {
-      const key = toolCall.field.toLowerCase().replace(/\s|_/g, "");
-      const normalized = fieldMap[key] || toolCall.field;
+      const normalized = normalizeKey(toolCall.field);
       session.data[normalized] = toolCall.value;
     }
   }
 
-  // Fallback: detect confirmation if GPT forgot to include finalize
   const isFinalConfirmation =
     /^(sí|si|todo bien|está correcto|correcto|está bien|todo está bien|está perfecto|está todo bien)$/i.test(
       userMessage.trim()
