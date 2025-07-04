@@ -3,7 +3,7 @@ const mongoose = require("mongoose");
 const sessionSchema = new mongoose.Schema(
   {
     senderId: { type: String, required: true, unique: true },
-    stage: { type: String, default: "name" },
+    messages: { type: Array, default: [] }, // stores conversation history
     data: {
       name: String,
       date: String,

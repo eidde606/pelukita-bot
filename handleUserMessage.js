@@ -8,125 +8,78 @@ async function handleUserMessage(senderId, userMessage) {
   let session = await Session.findOne({ senderId });
 
   if (!session) {
-    session = await Session.create({ senderId });
-  }
-
-  const { stage, data } = session;
-  const lowerMessage = userMessage.trim().toLowerCase();
-
-  const greetings = ["hola", "hello", "buenas", "hey"];
-  const askingForPackages =
-    lowerMessage.includes("paquete") ||
-    lowerMessage.includes("pelukines") ||
-    lowerMessage.includes("pelukones") ||
-    lowerMessage.includes("diferencia");
-
-  const nextStage = {
-    name: "date",
-    date: "time",
-    time: "service",
-    service: "price",
-    price: "phone",
-    phone: "address",
-    address: "notes",
-    notes: "confirm",
-  };
-
-  const followUp = {
-    name: "👤 ¿Cuál es tu nombre?",
-    date: "📅 ¿Qué fecha es la fiesta?",
-    time: "⏰ ¿A qué hora comenzará?",
-    service: "🎁 ¿Qué paquete deseas? Pelukines o Pelukones?",
-    price: "💰 ¿Cuál es el precio que se acordó?",
-    phone: "📱 ¿Cuál es tu número de teléfono?",
-    address: "📍 ¿Dónde será la fiesta?",
-    notes: "📝 ¿Algo más que Pelukita deba saber?",
-  };
-
-  // If greeting, reply nicely but don’t advance
-  if (greetings.includes(lowerMessage)) {
-    return stage === "name"
-      ? "👋 ¡Hola! ¿Cuál es tu nombre, por favor?"
-      : `👋 ¡Hola de nuevo! ${followUp[stage] || ""}`;
-  }
-
-  // If asking about packages, respond using AI and don’t save anything
-  if (askingForPackages || lowerMessage.includes("?")) {
-    const ai = await openai.chat.completions.create({
-      model: "gpt-4",
-      messages: [
-        {
-          role: "system",
-          content: `
-You are Pelukita, a joyful and charismatic female clown who offers fun birthday experiences. Only explain services if the user asks about them, and never break the booking flow unless it's a request for info.
-
-🎉 *Paquete Pelukines* – $650
-- 1 hora de pinta caritas
-- 2 horas de show con juegos y piñata
-- Parlante incluido
-- Add-ons: Muñeco gigante $60, Popcorn $200, DJ $1000
-
-🎊 *Paquete Pelukones* – $1500
-- Todo lo del Pelukines +
-- Muñeco + popcorn + DJ profesional (4 hrs)
-        `.trim(),
-        },
-        { role: "user", content: userMessage },
-      ],
+    session = await Session.create({
+      senderId,
+      stage: "start",
+      completed: false,
+      data: {},
     });
-
-    return ai.choices[0].message.content;
   }
 
-  // ✅ Only save input if it’s NOT a greeting, question, or empty
-  const shouldSave =
-    !greetings.includes(lowerMessage) &&
-    !lowerMessage.includes("?") &&
-    lowerMessage.length >= 2;
+  const messages = session.messages || [];
+  messages.push({ role: "user", content: userMessage });
 
-  if (shouldSave && stage !== "confirm" && nextStage[stage]) {
-    session.data[stage] = userMessage;
-    session.stage = nextStage[stage];
-    await session.save();
+  const response = await openai.chat.completions.create({
+    model: "gpt-4",
+    messages: [
+      {
+        role: "system",
+        content: `
+Eres Pelukita, una payasita alegre, carismática y profesional que ofrece experiencias divertidas para cumpleaños. Hablas en Spanglish, español o inglés, según cómo te escriba el cliente.
+
+Solo explicas los servicios si el cliente pregunta por ellos. Nunca interrumpas el flujo de la conversación si el cliente está haciendo una reservación, a menos que te pidan información.
+
+🎉 *Paquete Pelukines* – $650 – Ideal para fiestas en casa:
+- 1 hora de pinta caritas para todos los niños.
+- 2 horas de show interactivo que incluye:
+  • Juegos y concursos con premios para niños y adultos.
+  • Rompe la piñata y canto del Happy Birthday.
+- Parlante incluido.
+- Adicionales:
+  🧸 Muñeco gigante: $60 (Mario, Luigi, Mickey, Minnie, Plin Plin, Zenon)
+  🍿 Carrito de popcorn o algodón de azúcar (50 unidades): $200
+  🎧 DJ adicional (4 horas): $1000
+
+🎊 *Paquete Pelukones* – $1500 – Ideal para fiestas en local:
+- Todo lo incluido en Pelukines MÁS:
+  🧸 Muñeco gigante incluido
+  🍭 Popcorn y algodón incluidos (50 unidades)
+  🎧 DJ profesional (4 horas)
+
+Siempre responde con alegría, emoción y claridad. Nunca asumas que quieren reservar; deja que ellos lo digan primero. 🎈🎊🎉
+  `.trim(),
+      },
+      ...messages,
+    ],
+    temperature: 0.7,
+  });
+
+  const reply = response.choices[0].message.content;
+  const toolCall = extractJson(reply);
+
+  if (toolCall?.field && toolCall?.value) {
+    session.data[toolCall.field] = toolCall.value;
   }
 
-  // Respond with the next question based on current stage
-  switch (session.stage) {
-    case "name":
-      session.stage = "date";
-      await session.save();
-      return followUp.name;
-    case "date":
-    case "time":
-    case "service":
-    case "price":
-    case "phone":
-    case "address":
-    case "notes":
-      return followUp[session.stage];
-    case "confirm":
-      await Booking.create({ ...session.data });
-      await Session.deleteOne({ senderId });
-
-      return `🎉 ¡Gracias por reservar con Pelukita! Aquí están los detalles:\n\n${formatSummary(
-        session.data
-      )}\n\n📞 Te contactaremos pronto. ¡Va a ser una fiesta brutal! 🎈🥳`;
-    default:
-      return "¿Puedes repetir eso, por favor?";
+  if (toolCall?.action === "finalize") {
+    await Booking.create({ ...session.data });
+    await Session.deleteOne({ senderId });
+    return "🎉 ¡Gracias por reservar con Pelukita! 🎈 Tu evento ha sido guardado con éxito. ¡Va a ser una fiesta brutal!";
   }
+
+  session.messages = messages;
+  await session.save();
+
+  return reply.replace(/\{[^}]+\}/g, "").trim();
 }
 
-function formatSummary(data) {
-  return `
-👤 Nombre: ${data.name || "No especificado"}
-📅 Fecha: ${data.date || "No especificada"}
-⏰ Hora: ${data.time || "No especificada"}
-🎁 Paquete: ${data.service || "No especificado"}
-💰 Precio: ${data.price || "No especificado"}
-📱 Teléfono: ${data.phone || "No especificado"}
-📍 Dirección: ${data.address || "No especificada"}
-📝 Notas: ${data.notes || "Ninguna"}
-  `.trim();
+function extractJson(text) {
+  try {
+    const match = text.match(/\{[^}]+\}/);
+    if (match) return JSON.parse(match[0]);
+  } catch (e) {
+    return null;
+  }
 }
 
 module.exports = handleUserMessage;
