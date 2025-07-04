@@ -5,21 +5,6 @@ const sendEmail = require("./sendEmail");
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-function extractAllJson(text) {
-  const matches = [...text.matchAll(/\{[^}]+\}/g)];
-  const jsonObjects = [];
-
-  for (const match of matches) {
-    try {
-      jsonObjects.push(JSON.parse(match[0]));
-    } catch (err) {
-      // Invalid JSON, skip
-    }
-  }
-
-  return jsonObjects;
-}
-
 async function handleUserMessage(senderId, userMessage) {
   let session = await Session.findOne({ senderId });
 
@@ -92,19 +77,17 @@ Nunca respondas con solo el JSON. Siempre incluye una respuesta natural para el 
   const toolCalls = extractAllJson(reply);
   console.log("ToolCalls parsed:", toolCalls);
 
-  // Save fields from toolCalls
+  // Store fields
   for (const toolCall of toolCalls) {
     if (toolCall?.field && toolCall?.value) {
       session.data[toolCall.field] = toolCall.value;
     }
   }
 
-  // Handle finalize
-  if (toolCalls.some((tc) => tc.action === "finalize")) {
+  // If finalize was triggered
+  const finalizeCall = toolCalls.find((tc) => tc.action === "finalize");
+  if (finalizeCall) {
     console.log("Session data before creating booking:", session.data);
-
-    const bookingData = { ...session.data, status: "Booked" };
-    console.log("Final bookingData to be saved:", bookingData);
 
     const requiredFields = [
       "name",
@@ -114,17 +97,22 @@ Nunca respondas con solo el JSON. Siempre incluye una respuesta natural para el 
       "address",
       "email",
     ];
-    const hasAllFields = requiredFields.every((field) => bookingData[field]);
+    const missing = requiredFields.filter((field) => !session.data[field]);
 
-    if (hasAllFields) {
+    if (missing.length === 0) {
+      const bookingData = { ...session.data, status: "Booked" };
+      console.log("✅ Final bookingData to be saved:", bookingData);
+
       await Booking.create(bookingData);
       await sendEmail(bookingData.email, bookingData);
       await Session.deleteOne({ senderId });
 
       return "🎉 ¡Gracias por reservar con Pelukita! 🎈 Tu evento ha sido guardado con éxito y te hemos enviado un correo de confirmación. ¡Va a ser una fiesta brutal!";
     } else {
-      console.log("❌ Booking data is missing required fields.");
-      return "⚠️ Algo salió mal. Faltan datos para guardar la reservación. ¿Puedes verificar toda la información?";
+      console.log("❌ Cannot finalize. Missing:", missing);
+      return `⚠️ Falta información: ${missing.join(
+        ", "
+      )}. ¿Puedes completarla?`;
     }
   }
 
@@ -137,6 +125,20 @@ Nunca respondas con solo el JSON. Siempre incluye una respuesta natural para el 
     .trim();
 
   return cleaned;
+}
+
+function extractAllJson(text) {
+  const jsonMatches = text.match(/\{[^{}]+\}/g);
+  if (!jsonMatches) return [];
+  return jsonMatches
+    .map((str) => {
+      try {
+        return JSON.parse(str);
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
 }
 
 module.exports = handleUserMessage;
