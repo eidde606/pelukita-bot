@@ -75,20 +75,34 @@ Nunca respondas con solo el JSON. Siempre incluye una respuesta natural para el 
   const reply = response.choices[0].message.content;
   const toolCall = extractJson(reply);
 
-  if (toolCall?.field && toolCall?.value) {
-    session.data[toolCall.field] = toolCall.value;
-  }
-
   if (toolCall?.action === "finalize") {
-    await Booking.create({ ...session.data });
-    await Session.deleteOne({ senderId });
-    return "🎉 ¡Gracias por reservar con Pelukita! 🎈 Tu evento ha sido guardado con éxito. ¡Va a ser una fiesta brutal!";
+    const bookingData = { ...session.data, status: "Booked" };
+
+    // Only save if booking has minimum required fields
+    if (
+      bookingData.name &&
+      bookingData.date &&
+      bookingData.time &&
+      bookingData.phone &&
+      bookingData.address
+    ) {
+      await Booking.create(bookingData);
+      await sendEmail(toolCall.email, bookingData);
+      await Session.deleteOne({ senderId });
+      return "🎉 ¡Gracias por reservar con Pelukita! 🎈 Tu evento ha sido guardado con éxito y te hemos enviado un correo de confirmación. ¡Va a ser una fiesta brutal!";
+    } else {
+      return "⚠️ Algo salió mal. Faltan datos para guardar la reservación. ¿Puedes verificar toda la información?";
+    }
   }
 
   session.messages = messages;
   await session.save();
 
-  return reply.replace(/\{[^}]+\}/g, "").trim();
+  const cleaned = reply
+    .replace(/\{[^}]+\}/g, "")
+    .replace(/^[,\s\n\r]+$/gm, "")
+    .trim();
+  return cleaned;
 }
 
 function extractJson(text) {
