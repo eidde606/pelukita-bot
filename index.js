@@ -2,15 +2,25 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const axios = require("axios");
 const dotenv = require("dotenv");
-const OpenAI = require("openai");
+const mongoose = require("mongoose");
+const handleUserMessage = require("./handleUserMessage");
 
 dotenv.config();
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// ✅ Connect to MongoDB
+mongoose
+  .connect(process.env.MONGODB_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+  })
+  .then(() => console.log("✅ Connected to MongoDB"))
+  .catch((err) => {
+    console.error("❌ MongoDB connection error:", err.message);
+    process.exit(1);
+  });
 
 app.use(bodyParser.json());
 
@@ -19,7 +29,7 @@ app.get("/", (req, res) => {
   res.send("Pelukita Messenger Bot is live!");
 });
 
-// Webhook verification (GET)
+// Webhook verification
 app.get("/webhook", (req, res) => {
   const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
   const mode = req.query["hub.mode"];
@@ -35,66 +45,25 @@ app.get("/webhook", (req, res) => {
   }
 });
 
-// Handle incoming messages (POST)
+// Handle messages
 app.post("/webhook", async (req, res) => {
   console.log("🔔 Webhook triggered:", JSON.stringify(req.body, null, 2));
 
-  const body = req.body;
-
-  if (body.object === "page") {
-    for (const entry of body.entry) {
+  if (req.body.object === "page") {
+    for (const entry of req.body.entry) {
       const event = entry.messaging[0];
       const senderId = event.sender.id;
 
       if (event.message && event.message.text) {
         const userMessage = event.message.text.trim();
-        console.log("💬 Incoming message:", userMessage);
+        console.log("💬 Incoming:", userMessage);
 
         let botReply = "Lo siento, algo salió mal...";
 
         try {
-          const completion = await openai.chat.completions.create({
-            model: "gpt-4",
-            messages: [
-              {
-                role: "system",
-                content: `
-You are Pelukita, a cheerful and charismatic female clown who offers fun-filled birthday party packages for children and families. Speak in Spanglish, English, or Spanish depending on how the customer writes.
-
-Only bring up party packages if the user shows interest.
-
-Here are your services:
-
-🎉 *Paquete Pelukines* – $650 – Ideal para fiestas en casa:
-- 1 hora de pinta caritas para todos los niños.
-- 2 horas de show interactivo que incluye:
-  • Juegos y concursos con premios para niños y adultos.
-  • Rompe la piñata y canto del Happy Birthday.
-- Parlante incluido.
-- Adicionales:
-  🧸 Muñeco gigante: $60 (Mario, Luigi, Mickey, Minnie, Plin Plin, Zenon)
-  🍿 Carrito de popcorn o algodón de azúcar (50 unidades): $200
-  🎧 DJ adicional (4 horas): $1000
-
-🎊 *Paquete Pelukones* – $1500 – Ideal para fiestas en local:
-- Todo lo incluido en Pelukines, MÁS:
-  🧸 Muñeco gigante incluido
-  🍭 Popcorn y algodón incluidos (50 unidades)
-  🎧 DJ profesional (4 horas)
-
-Always be joyful, excited, and friendly. Only offer package info when the user asks or shows interest. Respond naturally to their intent, answer questions, and guide them clearly. Never assume—they go first. 🎈🎊🎉
-                `.trim(),
-              },
-              {
-                role: "user",
-                content: userMessage,
-              },
-            ],
-          });
-
-          botReply = completion.choices[0].message.content;
+          botReply = await handleUserMessage(senderId, userMessage); // pass senderId too
         } catch (err) {
-          console.error("❌ OpenAI error:", err.response?.data || err.message);
+          console.error("❌ handleUserMessage error:", err.message);
         }
 
         try {
@@ -105,20 +74,20 @@ Always be joyful, excited, and friendly. Only offer package info when the user a
               message: { text: botReply },
             }
           );
-          console.log("✅ AI reply sent to user:", senderId);
+          console.log("✅ Reply sent to user:", senderId);
         } catch (err) {
           console.error(
-            "❌ Error sending message:",
+            "❌ Message sending error:",
             err.response?.data || err.message
           );
         }
       }
     }
 
-    return res.status(200).send("EVENT_RECEIVED");
-  } else {
-    return res.sendStatus(404);
+    return res.sendStatus(200);
   }
+
+  res.sendStatus(404);
 });
 
 // Start server

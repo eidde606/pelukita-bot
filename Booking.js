@@ -1,6 +1,6 @@
-const moongose = require("mongoose");
+const mongoose = require("mongoose");
 
-const bookingSchema = new moongose.Schema(
+const bookingSchema = new mongoose.Schema(
   {
     name: String,
     date: String,
@@ -18,4 +18,4 @@ const bookingSchema = new moongose.Schema(
   { timestamps: true }
 );
 
-module.exports = moongose.model("Booking", bookingSchema);
+module.exports = mongoose.model("Booking", bookingSchema);
