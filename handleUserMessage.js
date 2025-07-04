@@ -2,6 +2,9 @@ const OpenAI = require("openai");
 const Session = require("./Session");
 const Booking = require("./Booking");
 const sendEmail = require("./sendEmail");
+const moment = require("moment");
+require("moment/locale/es"); // Load Spanish locale for moment.js
+moment.locale("es");
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -144,12 +147,20 @@ Después de recopilar todos, haz un resumen alegre.
   for (const toolCall of toolCalls) {
     if (toolCall?.field && toolCall.value !== undefined) {
       const normalized = normalizeKey(toolCall.field);
+
       if (normalized === "date") {
-        const date = new Date(toolCall.value);
-        if (isNaN(date) || date < new Date()) {
+        const parsedDate = moment(
+          toolCall.value,
+          ["D [de] MMMM", "D [de] MMMM YYYY", "YYYY-MM-DD", "MMMM D, YYYY"],
+          true
+        );
+        if (!parsedDate.isValid() || parsedDate.isBefore(moment(), "day")) {
           return "⚠️ La fecha proporcionada no es válida o está en el pasado. Por favor, ingresa una fecha futura.";
         }
+        session.data[normalized] = parsedDate.format("YYYY-MM-DD");
+        continue; // skip setting value again below
       }
+
       session.data[normalized] = toolCall.value;
     }
   }
