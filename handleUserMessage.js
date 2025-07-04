@@ -3,12 +3,11 @@ const Session = require("./Session");
 const Booking = require("./Booking");
 const sendEmail = require("./sendEmail");
 const moment = require("moment");
-require("moment/locale/es"); // Load Spanish locale for moment.js
+require("moment/locale/es");
 moment.locale("es");
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// Price calculation function for validation
 function calculatePrice(selectedpackage, extras) {
   const prices = {
     Pelukines: 650,
@@ -44,11 +43,7 @@ async function handleUserMessage(senderId, userMessage) {
     });
   }
 
-  // Ensure session.data is initialized
-  if (!session.data) {
-    session.data = {};
-  }
-
+  if (!session.data) session.data = {};
   const messages = session.messages || [];
   messages.push({ role: "user", content: userMessage });
 
@@ -125,9 +120,16 @@ Después de recopilar todos, haz un resumen alegre.
     date: ["fecha", "date"],
     time: ["hora", "time"],
     address: ["direccion", "address"],
-    children: ["niño", "kids", "children", "ninos"],
+    children: ["niño", "kids", "children", "ninos", "childrennumber"],
     package: ["paquete", "package"],
-    extras: ["extra", "addon", "adicional", "extras", "adicionales"],
+    extras: [
+      "extra",
+      "addon",
+      "adicional",
+      "extras",
+      "adicionales",
+      "additional",
+    ],
     price: ["precio", "totalprice", "price"],
     phone: ["telefono", "phone"],
     email: ["correo", "email"],
@@ -143,29 +145,53 @@ Después de recopilar todos, haz un resumen alegre.
     return lowerKey;
   };
 
-  // Process toolCalls and validate date
   for (const toolCall of toolCalls) {
     if (toolCall?.field && toolCall.value !== undefined) {
       const normalized = normalizeKey(toolCall.field);
 
       if (normalized === "date") {
-        const parsedDate = moment(
-          toolCall.value,
-          ["D [de] MMMM", "D [de] MMMM YYYY", "YYYY-MM-DD", "MMMM D, YYYY"],
-          true
-        );
+        let input = toolCall.value.trim().toLowerCase();
+        input = input.charAt(0).toUpperCase() + input.slice(1);
+
+        const monthMap = {
+          enero: "January",
+          febrero: "February",
+          marzo: "March",
+          abril: "April",
+          mayo: "May",
+          junio: "June",
+          julio: "July",
+          agosto: "August",
+          septiembre: "September",
+          octubre: "October",
+          noviembre: "November",
+          diciembre: "December",
+        };
+
+        for (const [es, en] of Object.entries(monthMap)) {
+          if (input.includes(es)) {
+            input = input.replace(es, en);
+            break;
+          }
+        }
+
+        if (!/\d{4}/.test(input)) {
+          input += ` ${new Date().getFullYear()}`;
+        }
+
+        const parsedDate = moment(input, ["D MMMM YYYY", "MMMM D YYYY"], true);
         if (!parsedDate.isValid() || parsedDate.isBefore(moment(), "day")) {
           return "⚠️ La fecha proporcionada no es válida o está en el pasado. Por favor, ingresa una fecha futura.";
         }
+
         session.data[normalized] = parsedDate.format("YYYY-MM-DD");
-        continue; // skip setting value again below
+        continue;
       }
 
       session.data[normalized] = toolCall.value;
     }
   }
 
-  // Check for missing fields after processing toolCalls
   const requiredFields = [
     "name",
     "birthdayName",
@@ -181,11 +207,6 @@ Después de recopilar todos, haz un resumen alegre.
     "email",
   ];
   const missing = requiredFields.filter((field) => !session.data[field]);
-  if (missing.length > 0 && !toolCalls.find((tc) => tc.action === "finalize")) {
-    return `🎉 ¡Vamos bien! Pero aún necesitamos: ${missing.join(
-      ", "
-    )}. ¿Me das esos datos?`;
-  }
 
   const isFinalConfirmation =
     /^(sí|si|ok|vale|correcto|está (correcto|bien|perfecto)|todo (bien|está bien|está perfecto))$/i.test(
@@ -199,7 +220,6 @@ Después de recopilar todos, haz un resumen alegre.
   if (finalizeCall) {
     console.log("Session data before creating booking:", session.data);
 
-    // Validate price
     const expectedPrice = calculatePrice(
       session.data.package,
       session.data.extras
