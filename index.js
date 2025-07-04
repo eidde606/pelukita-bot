@@ -21,9 +21,7 @@ mongoose
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 app.use(bodyParser.json());
 
@@ -58,7 +56,6 @@ app.post("/webhook", async (req, res) => {
 
       if (event.message && event.message.text) {
         const userMessage = event.message.text.trim();
-        const lowerMsg = userMessage.toLowerCase();
         console.log("💬 Incoming message:", userMessage);
 
         let botReply = "Lo siento, algo salió mal...";
@@ -66,15 +63,19 @@ app.post("/webhook", async (req, res) => {
         try {
           let session = await Session.findOne({ senderId });
           if (!session) {
-            session = new Session({ senderId, data: {}, stage: "init" });
+            session = new Session({ senderId, data: {}, stage: "initial" });
           }
 
-          const userIntent = await openai.chat.completions.create({
+          const stage = session.stage;
+          const data = session.data || {};
+
+          // Determine intent
+          const intentCheck = await openai.chat.completions.create({
             model: "gpt-4",
             messages: [
               {
                 role: "system",
-                content: `You are an intent classifier for Pelukita, a party clown. Categorize the message into one of the following: greeting, question, package_interest, booking_intent, or unknown.`,
+                content: `You are a friendly assistant. Identify the user's intent based on their message. Reply with one word: greeting, ask_services, ask_packages, start_booking, provide_info, unknown.`,
               },
               {
                 role: "user",
@@ -83,29 +84,13 @@ app.post("/webhook", async (req, res) => {
             ],
           });
 
-          const intent = userIntent.choices[0].message.content
-            .toLowerCase()
-            .trim();
+          const intent = intentCheck.choices[0].message.content
+            .trim()
+            .toLowerCase();
 
           if (intent === "greeting") {
-            botReply =
-              "¡Hola, hola! 🎈🎉 ¿Cómo puedo alegrar tu día? ¿Estás buscando dar una sorpresa especial o pensando en una fiesta divertidísima? 🎁🎂";
-          } else if (intent === "question") {
-            const completion = await openai.chat.completions.create({
-              model: "gpt-4",
-              messages: [
-                {
-                  role: "system",
-                  content: `You are Pelukita, a cheerful clown. Answer the customer's question clearly and helpfully, in Spanish, English, or Spanglish depending on their message.`,
-                },
-                {
-                  role: "user",
-                  content: userMessage,
-                },
-              ],
-            });
-            botReply = completion.choices[0].message.content;
-          } else if (intent === "package_interest") {
+            botReply = `¡Hola, hola! 🎈🎉 ¿Cómo puedo alegrar tu día? ¿Estás buscando dar una sorpresa especial o pensando en una fiesta divertidísima? 🎁🎂`;
+          } else if (intent === "ask_services" || intent === "ask_packages") {
             botReply = `🎊 ¡Claro! Ofrezco dos paquetes de fiesta llenos de diversión:
 
 1️⃣ 🎉 *Paquete Pelukines* – $650 – Ideal para fiestas en casa:
@@ -115,7 +100,7 @@ app.post("/webhook", async (req, res) => {
 - Parlante incluido 🔊
 Adicionales:
 🧸 Muñeco gigante: $60
-🍿 Carrito de popcorn o algodón (50): $200
+🍿 Popcorn o algodón (50): $200
 🎧 DJ (4 horas): $1000
 
 2️⃣ 🎊 *Paquete Pelukones* – $1500 – Ideal para locales:
@@ -124,14 +109,16 @@ Adicionales:
 - Popcorn y algodón incluidos 🍭
 - DJ profesional (4 horas) 🎧
 
-¿Quieres reservar alguno? 🎈`;
-          } else if (intent === "booking_intent") {
+¿Quieres reservar alguno o tienes dudas? 🎈`;
+          } else if (intent === "start_booking") {
+            session.stage = "booking";
+
             const parsed = await openai.chat.completions.create({
               model: "gpt-4",
               messages: [
                 {
                   role: "system",
-                  content: `You are a data parser. Given a message about booking a clown party, extract JSON: name, date (YYYY-MM-DD), time (HH:MM AM/PM), service (Pelukines or Pelukones), phone, address, notes. If unknown, set to null.`,
+                  content: `You are a data parser. Given a message about booking a clown party, extract and return JSON: name, date (YYYY-MM-DD), time (HH:MM AM/PM), service (Pelukines or Pelukones), phone, address, notes. If unknown, set to null.`,
                 },
                 {
                   role: "user",
@@ -150,7 +137,6 @@ Adicionales:
               "address",
               "notes",
             ];
-            const data = session.data || {};
 
             for (const field of fields) {
               if (!data[field] && extracted[field]) {
@@ -166,6 +152,7 @@ Adicionales:
             }
 
             session.data = data;
+
             const nextMissing = fields.find((f) => !data[f]);
 
             if (!nextMissing) {
@@ -175,21 +162,22 @@ Adicionales:
               botReply = `✅ ¡Reservación guardada! 🎉 Pelukita te verá el ${data.date} a las ${data.time}. 🥳`;
             } else {
               await session.save();
-              const prompt = await openai.chat.completions.create({
+              const askPrompt = await openai.chat.completions.create({
                 model: "gpt-4",
                 messages: [
                   {
                     role: "system",
-                    content: `You are Pelukita, a cheerful female clown. Ask kindly for: ${nextMissing}. Respond in Spanish, English, or Spanglish based on user's message.`,
+                    content: `You are Pelukita, the party clown. Ask nicely for the missing booking info: ${nextMissing}. Be joyful.`,
                   },
                 ],
               });
-              botReply = prompt.choices[0].message.content;
+              botReply = askPrompt.choices[0].message.content;
             }
           } else {
-            botReply =
-              "🎈 ¡Hola! ¿Cómo puedo ayudarte hoy con tu fiesta? Puedes preguntarme sobre los paquetes, hacer una reservación o pedirme más información. 😊";
+            botReply = `😊 ¡Gracias por tu mensaje! Puedes preguntarme sobre los paquetes, reservar una fiesta, o pedirme información. ¡Estoy aquí para ayudarte! 🎈`;
           }
+
+          await session.save();
         } catch (err) {
           console.error("❌ Error:", err);
           botReply =
