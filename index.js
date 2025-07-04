@@ -3,6 +3,19 @@ const bodyParser = require("body-parser");
 const axios = require("axios");
 const dotenv = require("dotenv");
 const OpenAI = require("openai");
+const mongoose = require("mongoose");
+
+const Booking = require("./Booking");
+
+const Session = require("./Session");
+
+mongoose
+  .connect(process.env.MONGODB_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+  })
+  .then(() => console.log("✅ Connected to MongoDB"))
+  .catch((err) => console.error("❌ MongoDB connection error:", err));
 
 dotenv.config();
 const app = express();
@@ -52,13 +65,35 @@ app.post("/webhook", async (req, res) => {
 
         let botReply = "Lo siento, algo salió mal...";
 
-        try {
-          const completion = await openai.chat.completions.create({
-            model: "gpt-4", // Use "gpt-3.5-turbo" if you're on a budget
-            messages: [
-              {
-                role: "system",
-                content: `
+        // ✅ Quick test: Save a dummy booking if user types "confirm"
+        if (userMessage.toLowerCase().includes("confirm")) {
+          try {
+            const newBooking = new Booking({
+              name: "John Test",
+              date: "2025-08-10",
+              time: "3:00 PM",
+              service: "Pelukines",
+              price: "$650",
+              phone: "804-555-0000",
+              address: "123 Fiesta St, Hopewell, VA",
+              notes: "Test booking from Facebook Messenger",
+            });
+
+            await newBooking.save();
+            botReply =
+              "🎉 ¡Gracias! Tu reservación ha sido confirmada y guardada exitosamente.";
+          } catch (err) {
+            console.error("❌ Error saving booking:", err.message);
+            botReply = "😓 Lo siento, hubo un error al guardar tu reservación.";
+          }
+        } else {
+          try {
+            const completion = await openai.chat.completions.create({
+              model: "gpt-4",
+              messages: [
+                {
+                  role: "system",
+                  content: `
 You are Pelukita, a cheerful and charismatic female clown who offers fun-filled birthday party packages for children and families. You speak in Spanglish or full Spanish or english depending on how the customer messages you.
 
 These are your services:
@@ -81,20 +116,25 @@ These are your services:
   🎧 DJ profesional (4 horas).
 
 Always respond with joy, emojis, and excitement like a party host. Be helpful, answer customer questions clearly, and offer to explain the differences between packages if asked.
-    `.trim(),
-              },
-              {
-                role: "user",
-                content: userMessage,
-              },
-            ],
-          });
+                  `.trim(),
+                },
+                {
+                  role: "user",
+                  content: userMessage,
+                },
+              ],
+            });
 
-          botReply = completion.choices[0].message.content;
-        } catch (err) {
-          console.error("❌ OpenAI error:", err.response?.data || err.message);
+            botReply = completion.choices[0].message.content;
+          } catch (err) {
+            console.error(
+              "❌ OpenAI error:",
+              err.response?.data || err.message
+            );
+          }
         }
 
+        // Send reply
         try {
           await axios.post(
             `https://graph.facebook.com/v18.0/me/messages?access_token=${process.env.PAGE_ACCESS_TOKEN}`,
@@ -103,12 +143,9 @@ Always respond with joy, emojis, and excitement like a party host. Be helpful, a
               message: { text: botReply },
             }
           );
-          console.log("✅ AI reply sent to user:", senderId);
+          console.log("✅ Bot reply sent to:", senderId);
         } catch (err) {
-          console.error(
-            "❌ Error sending message:",
-            err.response?.data || err.message
-          );
+          console.error("❌ Sending error:", err.response?.data || err.message);
         }
       }
     }
