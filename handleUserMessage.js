@@ -84,26 +84,30 @@ Nunca respondas con solo el JSON. Siempre incluye una respuesta natural para el 
     if (toolCall?.action === "finalize") {
       const bookingData = { ...session.data, status: "Booked" };
 
-      if (
-        bookingData.name &&
-        bookingData.date &&
-        bookingData.time &&
-        bookingData.phone &&
-        bookingData.address &&
-        bookingData.email
-      ) {
-        try {
-          await Booking.create(bookingData);
-          await sendEmail(bookingData.email, bookingData);
-          await Session.deleteOne({ senderId });
+      const allFieldsPresent = [
+        bookingData.name || bookingData.nombre,
+        bookingData.date || bookingData.fecha,
+        bookingData.time || bookingData.hora,
+        bookingData.phone || bookingData.telefono,
+        bookingData.address || bookingData.direccion,
+        bookingData.email ||
+          bookingData.correo ||
+          bookingData["correo electrónico"],
+      ].every(Boolean);
 
-          return "🎉 ¡Gracias por reservar con Pelukita! 🎈 Tu evento ha sido guardado con éxito y te hemos enviado un correo de confirmación. ¡Va a ser una fiesta brutal!";
-        } catch (err) {
-          console.error("❌ Error en la reserva:", err);
-          return "😢 Ocurrió un error al guardar la reservación o enviar el correo. Intenta otra vez o contacta a Pelukita directamente.";
-        }
+      if (allFieldsPresent) {
+        await Booking.create(bookingData);
+
+        const userEmail =
+          bookingData.email ||
+          bookingData.correo ||
+          bookingData["correo electrónico"];
+
+        await sendEmail(userEmail, bookingData);
+        await Session.deleteOne({ senderId });
+
+        return "🎉 ¡Gracias por reservar con Pelukita! 🎈 Tu evento ha sido guardado con éxito y te hemos enviado un correo de confirmación. ¡Va a ser una fiesta brutal!";
       } else {
-        console.log("❌ Missing booking fields:", bookingData);
         return "⚠️ Algo salió mal. Faltan datos para guardar la reservación. ¿Puedes verificar toda la información?";
       }
     }
@@ -116,22 +120,17 @@ Nunca respondas con solo el JSON. Siempre incluye una respuesta natural para el 
     .replace(/\{[^}]+\}/g, "")
     .replace(/^[,\s\n\r]+$/gm, "")
     .trim();
+
   return cleaned;
 }
 
 function extractAllJson(text) {
-  const matches = text.match(/\{[^}]+\}/g);
-  if (!matches) return [];
-
-  return matches
-    .map((str) => {
-      try {
-        return JSON.parse(str);
-      } catch {
-        return null;
-      }
-    })
-    .filter(Boolean);
+  try {
+    const matches = text.match(/\{[^}]+\}/g);
+    return matches ? matches.map((m) => JSON.parse(m)) : [];
+  } catch (e) {
+    return [];
+  }
 }
 
 module.exports = handleUserMessage;
