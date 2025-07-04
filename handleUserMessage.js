@@ -120,8 +120,15 @@ Después de recopilar todos, haz un resumen alegre.
     date: ["fecha", "date"],
     time: ["hora", "time"],
     address: ["direccion", "address"],
-    children: ["niño", "kids", "children", "ninos", "childrennumber"],
-    package: ["paquete", "package"],
+    children: [
+      "niño",
+      "kids",
+      "children",
+      "ninos",
+      "childrennumber",
+      "numberofkids",
+    ],
+    package: ["paquete", "package", "plan", "combo"],
     extras: [
       "extra",
       "addon",
@@ -129,10 +136,11 @@ Después de recopilar todos, haz un resumen alegre.
       "extras",
       "adicionales",
       "additional",
+      "additionals",
     ],
-    price: ["precio", "totalprice", "price"],
-    phone: ["telefono", "phone"],
-    email: ["correo", "email"],
+    price: ["precio", "totalprice", "price", "monto", "costo"],
+    phone: ["telefono", "phone", "celular"],
+    email: ["correo", "email", "correo electrónico"],
   };
 
   const normalizeKey = (key) => {
@@ -185,6 +193,19 @@ Después de recopilar todos, haz un resumen alegre.
         }
 
         session.data[normalized] = parsedDate.format("YYYY-MM-DD");
+        continue;
+      }
+
+      if (normalized === "package") {
+        const val = toolCall.value.toLowerCase();
+        if (val.includes("pelukones")) {
+          session.data.package = "Pelukones";
+        } else if (val.includes("pelukines")) {
+          session.data.package = "Pelukines";
+        } else {
+          session.data.package = toolCall.value;
+        }
+        console.log("✅ Detected package:", session.data.package);
         continue;
       }
 
