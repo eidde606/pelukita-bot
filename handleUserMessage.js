@@ -66,7 +66,7 @@ Recolecta el siguiente flujo de datos uno a uno:
 Cuando el cliente diga que todo está correcto, responde con { "action": "finalize" }. Antes de eso, guarda los campos como { "field": "nombre", "value": "Eddie" }, etc.
 
 Nunca respondas con solo el JSON. Siempre incluye una respuesta natural para el cliente.
-        `.trim(),
+`.trim(),
       },
       ...messages,
     ],
@@ -82,28 +82,35 @@ Nunca respondas con solo el JSON. Siempre incluye una respuesta natural para el 
     }
 
     if (toolCall?.action === "finalize") {
-      const bookingData = { ...session.data, status: "Booked" };
+      const data = session.data;
 
-      const allFieldsPresent = [
-        bookingData.name || bookingData.nombre,
-        bookingData.date || bookingData.fecha,
-        bookingData.time || bookingData.hora,
-        bookingData.phone || bookingData.telefono,
-        bookingData.address || bookingData.direccion,
-        bookingData.email ||
-          bookingData.correo ||
-          bookingData["correo electrónico"],
-      ].every(Boolean);
+      // Normalize field names
+      const bookingData = {
+        name: data.nombre || data.name,
+        birthdayKid: data["nombre del cumpleañero"],
+        age: data["edad del cumpleañero"],
+        date: data.fecha || data.date,
+        time: data.hora || data.time,
+        address: data.direccion || data.address,
+        kids: data["número de niños"],
+        package: data.paquete,
+        extras: data.adicionales,
+        total: data["precio total"],
+        phone: data.telefono || data.phone,
+        email: data["correo electrónico"] || data.email,
+        status: "Booked",
+      };
 
-      if (allFieldsPresent) {
+      if (
+        bookingData.name &&
+        bookingData.date &&
+        bookingData.time &&
+        bookingData.phone &&
+        bookingData.address &&
+        bookingData.email
+      ) {
         await Booking.create(bookingData);
-
-        const userEmail =
-          bookingData.email ||
-          bookingData.correo ||
-          bookingData["correo electrónico"];
-
-        await sendEmail(userEmail, bookingData);
+        await sendEmail(bookingData.email, bookingData);
         await Session.deleteOne({ senderId });
 
         return "🎉 ¡Gracias por reservar con Pelukita! 🎈 Tu evento ha sido guardado con éxito y te hemos enviado un correo de confirmación. ¡Va a ser una fiesta brutal!";
@@ -120,17 +127,20 @@ Nunca respondas con solo el JSON. Siempre incluye una respuesta natural para el 
     .replace(/\{[^}]+\}/g, "")
     .replace(/^[,\s\n\r]+$/gm, "")
     .trim();
-
   return cleaned;
 }
 
 function extractAllJson(text) {
-  try {
-    const matches = text.match(/\{[^}]+\}/g);
-    return matches ? matches.map((m) => JSON.parse(m)) : [];
-  } catch (e) {
-    return [];
-  }
+  const matches = [...text.matchAll(/\{[^}]+\}/g)];
+  return matches
+    .map((m) => {
+      try {
+        return JSON.parse(m[0]);
+      } catch (e) {
+        return null;
+      }
+    })
+    .filter(Boolean);
 }
 
 module.exports = handleUserMessage;
