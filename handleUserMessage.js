@@ -66,7 +66,7 @@ Recolecta el siguiente flujo de datos uno a uno:
 Cuando el cliente diga que todo está correcto, responde con { "action": "finalize" }. Antes de eso, guarda los campos como { "field": "nombre", "value": "Eddie" }, etc.
 
 Nunca respondas con solo el JSON. Siempre incluye una respuesta natural para el cliente.
-`.trim(),
+        `.trim(),
       },
       ...messages,
     ],
@@ -76,30 +76,19 @@ Nunca respondas con solo el JSON. Siempre incluye una respuesta natural para el 
   const reply = response.choices[0].message.content;
   const toolCalls = extractAllJson(reply);
 
+  console.log("ToolCalls parsed:", toolCalls);
+
+  // Loop through all parsed toolCalls
   for (const toolCall of toolCalls) {
     if (toolCall?.field && toolCall?.value) {
       session.data[toolCall.field] = toolCall.value;
     }
 
     if (toolCall?.action === "finalize") {
-      const data = session.data;
+      console.log("Session data before creating booking:", session.data);
 
-      // Normalize field names
-      const bookingData = {
-        name: data.nombre || data.name,
-        birthdayKid: data["nombre del cumpleañero"],
-        age: data["edad del cumpleañero"],
-        date: data.fecha || data.date,
-        time: data.hora || data.time,
-        address: data.direccion || data.address,
-        kids: data["número de niños"],
-        package: data.paquete,
-        extras: data.adicionales,
-        total: data["precio total"],
-        phone: data.telefono || data.phone,
-        email: data["correo electrónico"] || data.email,
-        status: "Booked",
-      };
+      const bookingData = { ...session.data, status: "Booked" };
+      console.log("Final bookingData to be saved:", bookingData);
 
       if (
         bookingData.name &&
@@ -115,6 +104,7 @@ Nunca respondas con solo el JSON. Siempre incluye una respuesta natural para el 
 
         return "🎉 ¡Gracias por reservar con Pelukita! 🎈 Tu evento ha sido guardado con éxito y te hemos enviado un correo de confirmación. ¡Va a ser una fiesta brutal!";
       } else {
+        console.log("❌ Booking data is missing required fields.");
         return "⚠️ Algo salió mal. Faltan datos para guardar la reservación. ¿Puedes verificar toda la información?";
       }
     }
@@ -131,12 +121,13 @@ Nunca respondas con solo el JSON. Siempre incluye una respuesta natural para el 
 }
 
 function extractAllJson(text) {
-  const matches = [...text.matchAll(/\{[^}]+\}/g)];
-  return matches
-    .map((m) => {
+  const jsonMatches = text.match(/\{[^{}]+\}/g);
+  if (!jsonMatches) return [];
+  return jsonMatches
+    .map((str) => {
       try {
-        return JSON.parse(m[0]);
-      } catch (e) {
+        return JSON.parse(str);
+      } catch {
         return null;
       }
     })
