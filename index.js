@@ -63,118 +63,63 @@ app.post("/webhook", async (req, res) => {
 
         let botReply = "Lo siento, algo salió mal...";
 
-        const greetings = ["hola", "hello", "hi", "buenas"];
-
-        // If greeting, greet and offer help
-        if (greetings.some((g) => lowerMsg.includes(g))) {
-          botReply = `🎉 ¡Hola! Soy Pelukita, la payasita más divertida de las fiestas infantiles. 🥳 ¿En qué puedo ayudarte hoy?
-
-🎁 Ofrezco dos paquetes:
-
-🎉 *Paquete Pelukines* – $650 – Ideal para fiestas en casa:
-- 1 hora de pinta caritas para todos los niños.
-- 2 horas de show interactivo que incluye:
-  • Juegos y concursos con premios para niños y adultos.
-  • Rompe la piñata y canto del Happy Birthday.
-- Pelukita lleva su propio speaker para animar el evento.
-- Adicionales:
-  🧸 Muñeco gigante: $60
-  🍿 Popcorn o algodón (50 unidades): $200
-  🎧 DJ adicional (4 horas): $1000
-
-🎊 *Paquete Pelukones* – $1500 – Ideal para fiestas en local:
-- Todo lo del Pelukines, MÁS:
-  🧸 Muñeco gigante incluido
-  🍭 Popcorn y algodón incluidos (50 unidades)
-  🎧 DJ profesional (4 horas)
-
-Escríbeme si quieres hacer una reservación o si tienes preguntas. 🎈`;
-        } else if (
-          lowerMsg.includes("reserv") ||
-          lowerMsg.includes("cita") ||
-          lowerMsg.includes("book")
-        ) {
-          try {
-            let session = await Session.findOne({ senderId });
-            if (!session) {
-              session = new Session({ senderId, data: {}, stage: "init" });
-            }
-
-            const aiExtraction = await openai.chat.completions.create({
-              model: "gpt-4",
-              messages: [
-                {
-                  role: "system",
-                  content: `You are a data parser. Given a message about booking a clown party, extract and return a JSON object with the fields: name, date (YYYY-MM-DD), time (HH:MM AM/PM), service (Pelukines or Pelukones), phone, address, notes. If anything is unknown, set it to null. Respond ONLY with JSON.`,
-                },
-                {
-                  role: "user",
-                  content: userMessage,
-                },
-              ],
-            });
-
-            const raw = aiExtraction.choices[0].message.content.trim();
-            let extracted;
-            try {
-              extracted = JSON.parse(raw);
-            } catch {
-              botReply = raw;
-              extracted = null;
-            }
-
-            if (extracted) {
-              const fields = [
-                "name",
-                "date",
-                "time",
-                "service",
-                "phone",
-                "address",
-                "notes",
-              ];
-              const data = session.data || {};
-
-              for (const field of fields) {
-                if (!data[field] && extracted[field]) {
-                  data[field] = extracted[field];
-                  if (field === "service") {
-                    data.price = extracted[field]
-                      .toLowerCase()
-                      .includes("pelukon")
-                      ? "$1500"
-                      : "$650";
-                  }
-                }
-              }
-
-              session.data = data;
-              const nextMissing = fields.find((f) => !data[f]);
-
-              if (!nextMissing) {
-                const newBooking = new Booking({ ...data });
-                await newBooking.save();
-                await Session.deleteOne({ senderId });
-                botReply = `✅ ¡Reservación guardada! 🎉 Pelukita te verá el ${data.date} a las ${data.time}. 🥳`;
-              } else {
-                await session.save();
-                const pelukitaPrompt = await openai.chat.completions.create({
-                  model: "gpt-4",
-                  messages: [
-                    {
-                      role: "system",
-                      content: `You are Pelukita, a cheerful and charismatic female clown. Ask the customer for their missing information: ${nextMissing}`,
-                    },
-                  ],
-                });
-                botReply = pelukitaPrompt.choices[0].message.content;
-              }
-            }
-          } catch (err) {
-            console.error("❌ Error:", err);
-            botReply =
-              "😓 Pelukita no entendió. ¿Podrías repetirlo de otra forma?";
+        try {
+          let session = await Session.findOne({ senderId });
+          if (!session) {
+            session = new Session({ senderId, data: {}, stage: "init" });
           }
+
+          const parsed = await openai.chat.completions.create({
+            model: "gpt-4",
+            messages: [
+              {
+                role: "system",
+                content: `You are Pelukita, a cheerful and charismatic female clown who offers fun-filled birthday party services. You respond in Spanglish, Spanish, or English depending on how the user writes to you.
+
+Act like a real human party host — warm, friendly, and never pushy.
+
+**Important behavior:**
+- Greet and ask how you can help if someone says "Hola", "Hi", or similar.
+- Only talk about birthday party packages if the user asks about them.
+- Only ask for booking information if the user clearly says they want to book.
+- If the user asks questions, answer them naturally like a real person.
+- If the user sends a full sentence explaining what they want, extract the data quietly but still reply like a human.
+- Avoid repeating the same thing or rushing the process.
+- Always include emojis and party vibes in your tone.
+
+Available services:
+
+🎉 *Paquete Pelukines* – $650 – Ideal for home parties:
+- 1 hour of face painting.
+- 2 hours of interactive show:
+  • Games, contests with prizes.
+  • Happy birthday singing & piñata.
+- Pelukita brings her own speaker.
+- Optional add-ons:
+  🧸 Giant mascot: $60 (Mario, Luigi, Mickey, Minnie, Plin Plin, Zenon)
+  🍿 Popcorn or cotton candy cart (50 servings): $200
+  🎧 DJ (4 hours): $1000
+
+🎊 *Paquete Pelukones* – $1500 – Ideal for venues:
+- Everything in Pelukines PLUS:
+  🧸 Mascot included
+  🍭 Popcorn and cotton candy included (50 servings)
+  🎧 Professional DJ (4 hours)
+
+Only share these details when users ask about your services.
+
+Always answer questions clearly, and be fun, excited, and helpful like a party entertainer. 🎈🎊🎉`,
+              },
+              {
+                role: "user",
+                content: userMessage,
+              },
+            ],
+          });
+
+          botReply = parsed.choices[0].message.content;
+        } catch (err) {
+          console.error("❌ OpenAI error:", err.response?.data || err.message);
         }
 
         try {
