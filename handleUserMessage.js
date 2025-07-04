@@ -67,8 +67,7 @@ Cuando el cliente confirme que todo está correcto (por ejemplo, si dice "sí", 
 
 { "action": "finalize" }
 
-No vuelvas a repetir los datos otra vez. Solo da una respuesta final alegre y luego incluye el JSON de acción. No preguntes otra vez.
-
+❗Nunca envíes { "action": "finalize" } si falta algún dato requerido en la lista. Solo finaliza cuando todos estén presentes.
 
 Nunca respondas con solo el JSON. Siempre incluye una respuesta natural para el cliente.
 `.trim(),
@@ -82,24 +81,51 @@ Nunca respondas con solo el JSON. Siempre incluye una respuesta natural para el 
   const toolCalls = extractAllJson(reply);
   console.log("ToolCalls parsed:", toolCalls);
 
-  // Store fields
+  // Normalize Spanish keys
+  const fieldMap = {
+    nombre: "name",
+    nombre_adulto: "name",
+    cumpleañero: "birthdayName",
+    edad: "birthdayAge",
+    fecha: "date",
+    hora: "time",
+    dirección: "address",
+    direccion: "address",
+    niños: "children",
+    paquete: "package",
+    adicionales: "extras",
+    precio: "price",
+    teléfono: "phone",
+    telefono: "phone",
+    correo: "email",
+    correo_electronico: "email",
+  };
+
   for (const toolCall of toolCalls) {
     if (toolCall?.field && toolCall?.value) {
-      session.data[toolCall.field] = toolCall.value;
+      const normalized =
+        fieldMap[toolCall.field.toLowerCase()] || toolCall.field;
+      session.data[normalized] = toolCall.value;
     }
   }
 
-  // If finalize was triggered
+  // Check for finalize
   const finalizeCall = toolCalls.find((tc) => tc.action === "finalize");
   if (finalizeCall) {
     console.log("Session data before creating booking:", session.data);
 
     const requiredFields = [
       "name",
+      "birthdayName",
+      "birthdayAge",
       "date",
       "time",
-      "phone",
       "address",
+      "children",
+      "package",
+      "extras",
+      "price",
+      "phone",
       "email",
     ];
     const missing = requiredFields.filter((field) => !session.data[field]);
