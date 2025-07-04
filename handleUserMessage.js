@@ -72,8 +72,6 @@ Si el cliente responde con algo como “sí”, “todo bien”, “está perfec
 ⚠️ Nunca olvides poner { "action": "finalize" } al final de tu respuesta cuando el cliente confirma que todo está bien. No vuelvas a preguntar nada.
 
 NO respondas solo con el JSON. Siempre da una despedida alegre Y el JSON al final.
-
-
 `.trim(),
       },
       ...messages,
@@ -113,8 +111,16 @@ NO respondas solo con el JSON. Siempre da una despedida alegre Y el JSON al fina
     }
   }
 
-  // Check for finalize
-  const finalizeCall = toolCalls.find((tc) => tc.action === "finalize");
+  // Fallback: detect confirmation in plain text if GPT forgot to include finalize
+  const isFinalConfirmation =
+    /^(sí|si|todo bien|está correcto|correcto|está bien|todo está bien|está perfecto|está todo bien)$/i.test(
+      userMessage.trim()
+    );
+
+  const finalizeCall =
+    toolCalls.find((tc) => tc.action === "finalize") ||
+    (isFinalConfirmation ? { action: "finalize" } : null);
+
   if (finalizeCall) {
     console.log("Session data before creating booking:", session.data);
 
