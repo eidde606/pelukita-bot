@@ -71,12 +71,13 @@ app.post("/webhook", async (req, res) => {
             session = new Session({ senderId, data: {}, stage: "init" });
           }
 
-          const parsed = await openai.chat.completions.create({
+          // 🔍 Try extracting structured booking data from the message
+          const aiExtraction = await openai.chat.completions.create({
             model: "gpt-4",
             messages: [
               {
                 role: "system",
-                content: `You are a data parser. Given a message about booking a clown party, extract and return JSON: name, date (YYYY-MM-DD), time (HH:MM AM/PM), service (Pelukines or Pelukones), phone, address, notes. If unknown, set to null.`,
+                content: `You are a data parser. Given a message about booking a clown party, extract and return a JSON object with the fields: name, date (YYYY-MM-DD), time (HH:MM AM/PM), service (Pelukines or Pelukones), phone, address, notes. If anything is unknown, set it to null. Respond ONLY with JSON.`,
               },
               {
                 role: "user",
@@ -85,50 +86,69 @@ app.post("/webhook", async (req, res) => {
             ],
           });
 
-          const extracted = JSON.parse(parsed.choices[0].message.content);
-          const fields = [
-            "name",
-            "date",
-            "time",
-            "service",
-            "phone",
-            "address",
-            "notes",
-          ];
-          const data = session.data || {};
-
-          for (const field of fields) {
-            if (!data[field] && extracted[field]) {
-              data[field] = extracted[field];
-              if (field === "service") {
-                data.price = extracted[field].toLowerCase().includes("pelukon")
-                  ? "$1500"
-                  : "$650";
-              }
-            }
+          const raw = aiExtraction.choices[0].message.content.trim();
+          let extracted;
+          try {
+            extracted = JSON.parse(raw);
+          } catch {
+            // Not JSON – treat as a regular Pelukita reply instead
+            botReply = raw;
+            extracted = null;
           }
 
-          session.data = data;
+          if (extracted) {
+            const fields = [
+              "name",
+              "date",
+              "time",
+              "service",
+              "phone",
+              "address",
+              "notes",
+            ];
+            const data = session.data || {};
 
-          const nextMissing = fields.find((f) => !data[f]);
+            for (const field of fields) {
+              if (!data[field] && extracted[field]) {
+                data[field] = extracted[field];
+                if (field === "service") {
+                  data.price = extracted[field]
+                    .toLowerCase()
+                    .includes("pelukon")
+                    ? "$1500"
+                    : "$650";
+                }
+              }
+            }
 
-          if (!nextMissing) {
-            const newBooking = new Booking({ ...data });
-            await newBooking.save();
-            await Session.deleteOne({ senderId });
-            botReply = `✅ ¡Reservación guardada! 🎉 Pelukita te verá el ${data.date} a las ${data.time}. 🥳`;
-          } else {
-            await session.save();
-            const pelukitaPrompt = await openai.chat.completions.create({
-              model: "gpt-4",
-              messages: [
-                {
-                  role: "system",
-                  content: `You are Pelukita, a cheerful and charismatic female clown who offers fun-filled birthday party packages. Respond in Spanish/Spanglish/English depending on user's input. Ask nicely for: ${nextMissing}`,
-                },
-              ],
-            });
-            botReply = pelukitaPrompt.choices[0].message.content;
+            session.data = data;
+
+            const nextMissing = fields.find((f) => !data[f]);
+
+            if (!nextMissing) {
+              const newBooking = new Booking({ ...data });
+              await newBooking.save();
+              await Session.deleteOne({ senderId });
+              botReply = `✅ ¡Reservación guardada! 🎉 Pelukita te verá el ${data.date} a las ${data.time}. 🥳`;
+            } else {
+              await session.save();
+
+              const pelukitaPrompt = await openai.chat.completions.create({
+                model: "gpt-4",
+                messages: [
+                  {
+                    role: "system",
+                    content: `You are Pelukita, a cheerful and charismatic female clown who offers fun-filled birthday party packages. Speak in Spanish/Spanglish/English depending on the customer. Ask politely for the missing info: ${nextMissing}`,
+                  },
+                  {
+                    role: "user",
+                    content: userMessage,
+                  },
+                ],
+              });
+
+              botReply = pelukitaPrompt.choices[0].message.content;
+            }
           }
         } catch (err) {
           console.error("❌ Error:", err);
