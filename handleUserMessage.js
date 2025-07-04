@@ -19,33 +19,15 @@ function calculatePrice(selectedpackage, extras) {
   };
   let total =
     selectedpackage === "Pelukones" ? prices.Pelukones : prices.Pelukines;
-  let priceBreakdown = { base: total, extras: [] };
-
   if (extras) {
     const extrasArray = Array.isArray(extras)
       ? extras
-      : extras
-          .split(",")
-          .map((e) => e.trim())
-          .filter(Boolean);
-    if (extrasArray.includes("giantMascot")) {
-      total += prices.giantMascot;
-      priceBreakdown.extras.push({ giantMascot: prices.giantMascot });
-    }
-    if (extrasArray.includes("popcorn")) {
-      total += prices.popcorn;
-      priceBreakdown.extras.push({ popcorn: prices.popcorn });
-    }
-    if (extrasArray.includes("cottonCandy")) {
-      total += prices.cottonCandy;
-      priceBreakdown.extras.push({ cottonCandy: prices.cottonCandy });
-    }
-    if (extrasArray.includes("dj")) {
-      total += prices.dj;
-      priceBreakdown.extras.push({ dj: prices.dj });
-    }
+      : extras.split(",").map((e) => e.trim());
+    if (extrasArray.includes("giantMascot")) total += prices.giantMascot;
+    if (extrasArray.includes("popcorn")) total += prices.popcorn;
+    if (extrasArray.includes("cottonCandy")) total += prices.cottonCandy;
+    if (extrasArray.includes("dj")) total += prices.dj;
   }
-  console.log("Price Breakdown:", JSON.stringify(priceBreakdown, null, 2));
   return total;
 }
 
@@ -120,8 +102,6 @@ Después de recopilar todos, haz un resumen alegre.
 \`\`\`
 
 ✅ NO OMITAS NINGUNO. NUNCA pongas solo \`{ "action": "finalize" }\` sin los otros campos.
-
-⚠️ Si el precio proporcionado no coincide con el calculado, pide al usuario que confirme el paquete y los adicionales con un mensaje claro que incluya los detalles del cálculo. Ejemplo: "El precio proporcionado ($1500) no coincide con el esperado ($650). Seleccionaste el paquete Pelukines ($650) sin adicionales. ¿Querías el paquete Pelukones ($1500) o agregar extras? Por favor, confirma."
 `.trim(),
       },
       ...messages,
@@ -131,7 +111,7 @@ Después de recopilar todos, haz un resumen alegre.
 
   const reply = response.choices[0].message.content;
   const toolCalls = extractAllJson(reply);
-  console.log("ToolCalls parsed:", JSON.stringify(toolCalls, null, 2));
+  console.log("ToolCalls parsed:", toolCalls);
 
   const keyMap = {
     name: ["name", "adultname", "nombre", "adultnombre"],
@@ -238,60 +218,25 @@ Después de recopilar todos, haz un resumen alegre.
     (isFinalConfirmation ? { action: "finalize" } : null);
 
   if (finalizeCall) {
-    console.log(
-      "Session data before creating booking:",
-      JSON.stringify(session.data, null, 2)
-    );
-
-    const prices = {
-      Pelukines: 650,
-      Pelukones: 1500,
-      giantMascot: 60,
-      popcorn: 200,
-      cottonCandy: 200,
-      dj: 1000,
-    };
+    console.log("Session data before creating booking:", session.data);
 
     const expectedPrice = calculatePrice(
       session.data.package,
       session.data.extras
     );
-    const providedPrice = parseFloat(
-      session.data.price?.toString().replace(/[^\d.]/g, "") || "0"
+
+    const providedPrice = parseInt(
+      session.data.price.toString().replace(/[^\d]/g, ""),
+      10
     );
 
-    console.log("Package:", session.data.package);
-    console.log("Extras:", session.data.extras);
-    console.log("Provided Price:", providedPrice);
-    console.log("Expected Price:", expectedPrice);
-
     if (providedPrice !== expectedPrice) {
-      let errorMessage = `⚠️ El precio proporcionado (${session.data.price}) no coincide con el esperado (${expectedPrice}). `;
-      errorMessage += `Detalles: Paquete ${session.data.package} ($${
-        prices[session.data.package]
-      })`;
-      if (session.data.extras) {
-        const extrasCost =
-          calculatePrice(session.data.package, session.data.extras) -
-          prices[session.data.package];
-        errorMessage += `, Extras: ${session.data.extras} (+$${extrasCost})`;
-      } else {
-        errorMessage += ", Extras: ninguno";
-      }
-      errorMessage += ". ¿Puedes confirmar el paquete y adicionales?";
-      if (providedPrice === 1500 && session.data.package === "Pelukines") {
-        errorMessage +=
-          " Parece que quisiste el paquete Pelukones ($1500). ¿Es correcto?";
-      }
-      return errorMessage;
+      return `⚠️ El precio proporcionado (${session.data.price}) no coincide con el esperado (${expectedPrice}). ¿Puedes confirmar el paquete y adicionales?`;
     }
 
     if (missing.length === 0) {
       const bookingData = { ...session.data, status: "Booked" };
-      console.log(
-        "✅ Final bookingData to be saved:",
-        JSON.stringify(bookingData, null, 2)
-      );
+      console.log("✅ Final bookingData to be saved:", bookingData);
 
       try {
         await Booking.create(bookingData);
