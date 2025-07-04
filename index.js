@@ -11,14 +11,19 @@ const Session = require("./Session");
 dotenv.config();
 
 mongoose
-  .connect(process.env.MONGODB_URI)
+  .connect(process.env.MONGODB_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+  })
   .then(() => console.log("✅ Connected to MongoDB"))
   .catch((err) => console.error("❌ MongoDB connection error:", err));
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 app.use(bodyParser.json());
 
@@ -42,6 +47,8 @@ app.get("/webhook", (req, res) => {
 });
 
 app.post("/webhook", async (req, res) => {
+  console.log("🔔 Webhook triggered:", JSON.stringify(req.body, null, 2));
+
   const body = req.body;
 
   if (body.object === "page") {
@@ -51,24 +58,23 @@ app.post("/webhook", async (req, res) => {
 
       if (event.message && event.message.text) {
         const userMessage = event.message.text.trim();
-        let botReply =
-          "😓 Lo siento, no entendí eso. ¿Podrías repetirlo de otra manera?";
+        console.log("💬 Incoming message:", userMessage);
+
+        let botReply = "Lo siento, algo salió mal...";
 
         try {
           let session = await Session.findOne({ senderId });
-          if (!session)
+          if (!session) {
             session = new Session({ senderId, data: {}, stage: "init" });
+          }
 
-          const extract = await openai.chat.completions.create({
+          // Extract info from user message
+          const parsed = await openai.chat.completions.create({
             model: "gpt-4",
             messages: [
               {
                 role: "system",
-                content: `You're a JSON extractor. Given a message about Pelukita bookings, extract:
-{
-  name, date (YYYY-MM-DD), time (HH:MM AM/PM), phone, address, service (Pelukines/Pelukones), notes
-}
-Missing = null.`,
+                content: `You are a data parser. Given a message about booking a clown party, extract and return JSON: name, date (YYYY-MM-DD), time (HH:MM AM/PM), service (Pelukines or Pelukones), phone, address, notes. If unknown, set to null. Respond with ONLY the JSON.`,
               },
               {
                 role: "user",
@@ -77,17 +83,24 @@ Missing = null.`,
             ],
           });
 
-          const extracted = JSON.parse(extract.choices[0].message.content);
+          const rawText = parsed.choices[0].message.content.trim();
+          const jsonMatch = rawText.match(/\{[\s\S]*\}/); // get JSON block
+
+          if (!jsonMatch)
+            throw new Error("No valid JSON found in OpenAI response");
+
+          const extracted = JSON.parse(jsonMatch[0]);
+
           const fields = [
             "name",
             "date",
             "time",
+            "service",
             "phone",
             "address",
-            "service",
             "notes",
           ];
-          const data = session.data;
+          const data = session.data || {};
 
           for (const field of fields) {
             if (!data[field] && extracted[field]) {
@@ -102,15 +115,41 @@ Missing = null.`,
 
           session.data = data;
 
-          const needsHelp = !fields.some((f) => extracted[f]);
+          const nextMissing = fields.find((f) => !data[f]);
 
-          if (needsHelp) {
-            const answer = await openai.chat.completions.create({
+          if (!nextMissing) {
+            const newBooking = new Booking({ ...data });
+            await newBooking.save();
+            await Session.deleteOne({ senderId });
+            botReply = `✅ ¡Reservación guardada! 🎉 Pelukita te verá el ${data.date} a las ${data.time}. 🥳`;
+          } else {
+            await session.save();
+
+            const pelukitaPrompt = await openai.chat.completions.create({
               model: "gpt-4",
               messages: [
                 {
                   role: "system",
-                  content: `You are Pelukita, a joyful, charismatic female party clown. Greet users, answer questions about your services or pricing, and only move to booking if they show interest. NEVER ask for booking details unless they clearly want to book.`,
+                  content: `
+You are Pelukita, a cheerful and charismatic female clown who offers fun-filled birthday party packages for children and families. Respond ONLY when asked. If a user shows interest in booking, gather missing fields politely and joyfully. If not booking yet, just answer questions or chat happily.
+
+Your services:
+🎉 Paquete Pelukines – $650 – Ideal para fiestas en casa:
+- 1 hora de pinta caritas
+- 2 horas de show con juegos y concursos
+- Piñata y Happy Birthday 🎂
+- Parlante incluido 🔊
+Adicionales:
+🧸 Muñeco gigante: $60
+🍿 Popcorn o algodón (50): $200
+🎧 DJ (4 horas): $1000
+
+🎊 Paquete Pelukones – $1500 – Ideal para locales:
+- Todo lo de Pelukines
+- Muñeco incluido 🧸
+- Popcorn y algodón incluidos 🍭
+- DJ profesional (4 horas) 🎧
+                  `.trim(),
                 },
                 {
                   role: "user",
@@ -118,30 +157,13 @@ Missing = null.`,
                 },
               ],
             });
-            botReply = answer.choices[0].message.content;
-          } else {
-            const nextField = fields.find((f) => !data[f]);
 
-            if (!nextField) {
-              await Booking.create({ ...data });
-              await Session.deleteOne({ senderId });
-              botReply = `🎉 ¡Gracias! Tu reservación para el paquete ${data.service} ha sido confirmada para el ${data.date} a las ${data.time}. 📞 ${data.phone}`;
-            } else {
-              await session.save();
-              const prompt = await openai.chat.completions.create({
-                model: "gpt-4",
-                messages: [
-                  {
-                    role: "system",
-                    content: `You are Pelukita. The user is trying to book a party. Ask nicely for their missing '${nextField}'. Respond in the user's language.`,
-                  },
-                ],
-              });
-              botReply = prompt.choices[0].message.content;
-            }
+            botReply = pelukitaPrompt.choices[0].message.content.trim();
           }
         } catch (err) {
           console.error("❌ Error:", err);
+          botReply =
+            "😓 Pelukita no entendió. ¿Podrías repetirlo de otra forma?";
         }
 
         try {
@@ -152,15 +174,19 @@ Missing = null.`,
               message: { text: botReply },
             }
           );
+          console.log("✅ Bot reply sent to:", senderId);
         } catch (err) {
           console.error("❌ Sending error:", err.response?.data || err.message);
         }
       }
     }
+
     return res.status(200).send("EVENT_RECEIVED");
   } else {
     return res.sendStatus(404);
   }
 });
 
-app.listen(PORT, () => console.log(`✅ Server is running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`✅ Server is running on port ${PORT}`);
+});
