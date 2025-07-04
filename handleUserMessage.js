@@ -119,7 +119,7 @@ Después de recopilar todos, haz un resumen alegre.
   };
 
   for (const toolCall of toolCalls) {
-    if (toolCall?.field && toolCall?.value) {
+    if (toolCall?.field && toolCall.value !== undefined) {
       const normalized = normalizeKey(toolCall.field);
       session.data[normalized] = toolCall.value;
     }
