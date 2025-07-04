@@ -5,6 +5,21 @@ const sendEmail = require("./sendEmail");
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+function extractAllJson(text) {
+  const matches = [...text.matchAll(/\{[^}]+\}/g)];
+  const jsonObjects = [];
+
+  for (const match of matches) {
+    try {
+      jsonObjects.push(JSON.parse(match[0]));
+    } catch (err) {
+      // Invalid JSON, skip
+    }
+  }
+
+  return jsonObjects;
+}
+
 async function handleUserMessage(senderId, userMessage) {
   let session = await Session.findOne({ senderId });
 
@@ -66,7 +81,7 @@ Recolecta el siguiente flujo de datos uno a uno:
 Cuando el cliente diga que todo está correcto, responde con { "action": "finalize" }. Antes de eso, guarda los campos como { "field": "nombre", "value": "Eddie" }, etc.
 
 Nunca respondas con solo el JSON. Siempre incluye una respuesta natural para el cliente.
-        `.trim(),
+`.trim(),
       },
       ...messages,
     ],
@@ -75,38 +90,41 @@ Nunca respondas con solo el JSON. Siempre incluye una respuesta natural para el 
 
   const reply = response.choices[0].message.content;
   const toolCalls = extractAllJson(reply);
-
   console.log("ToolCalls parsed:", toolCalls);
 
-  // Loop through all parsed toolCalls
+  // Save fields from toolCalls
   for (const toolCall of toolCalls) {
     if (toolCall?.field && toolCall?.value) {
       session.data[toolCall.field] = toolCall.value;
     }
+  }
 
-    if (toolCall?.action === "finalize") {
-      console.log("Session data before creating booking:", session.data);
+  // Handle finalize
+  if (toolCalls.some((tc) => tc.action === "finalize")) {
+    console.log("Session data before creating booking:", session.data);
 
-      const bookingData = { ...session.data, status: "Booked" };
-      console.log("Final bookingData to be saved:", bookingData);
+    const bookingData = { ...session.data, status: "Booked" };
+    console.log("Final bookingData to be saved:", bookingData);
 
-      if (
-        bookingData.name &&
-        bookingData.date &&
-        bookingData.time &&
-        bookingData.phone &&
-        bookingData.address &&
-        bookingData.email
-      ) {
-        await Booking.create(bookingData);
-        await sendEmail(bookingData.email, bookingData);
-        await Session.deleteOne({ senderId });
+    const requiredFields = [
+      "name",
+      "date",
+      "time",
+      "phone",
+      "address",
+      "email",
+    ];
+    const hasAllFields = requiredFields.every((field) => bookingData[field]);
 
-        return "🎉 ¡Gracias por reservar con Pelukita! 🎈 Tu evento ha sido guardado con éxito y te hemos enviado un correo de confirmación. ¡Va a ser una fiesta brutal!";
-      } else {
-        console.log("❌ Booking data is missing required fields.");
-        return "⚠️ Algo salió mal. Faltan datos para guardar la reservación. ¿Puedes verificar toda la información?";
-      }
+    if (hasAllFields) {
+      await Booking.create(bookingData);
+      await sendEmail(bookingData.email, bookingData);
+      await Session.deleteOne({ senderId });
+
+      return "🎉 ¡Gracias por reservar con Pelukita! 🎈 Tu evento ha sido guardado con éxito y te hemos enviado un correo de confirmación. ¡Va a ser una fiesta brutal!";
+    } else {
+      console.log("❌ Booking data is missing required fields.");
+      return "⚠️ Algo salió mal. Faltan datos para guardar la reservación. ¿Puedes verificar toda la información?";
     }
   }
 
@@ -117,21 +135,8 @@ Nunca respondas con solo el JSON. Siempre incluye una respuesta natural para el 
     .replace(/\{[^}]+\}/g, "")
     .replace(/^[,\s\n\r]+$/gm, "")
     .trim();
-  return cleaned;
-}
 
-function extractAllJson(text) {
-  const jsonMatches = text.match(/\{[^{}]+\}/g);
-  if (!jsonMatches) return [];
-  return jsonMatches
-    .map((str) => {
-      try {
-        return JSON.parse(str);
-      } catch {
-        return null;
-      }
-    })
-    .filter(Boolean);
+  return cleaned;
 }
 
 module.exports = handleUserMessage;
