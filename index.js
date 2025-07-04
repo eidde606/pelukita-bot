@@ -62,7 +62,6 @@ app.post("/webhook", async (req, res) => {
         let session = await Session.findOne({ senderId });
         const data = session?.data || {};
 
-        // 🧠 Run OpenAI to parse structured data from message
         try {
           const extracted = await openai.chat.completions.create({
             model: "gpt-4",
@@ -105,18 +104,10 @@ app.post("/webhook", async (req, res) => {
           }
 
           session.data = data;
-
           const nextField = fields.find((f) => !data[f]);
-
-          if (!nextField) {
-            session.stage = "confirm";
-          } else {
-            session.stage = nextField;
-          }
-
+          session.stage = nextField || "confirm";
           await session.save();
 
-          // Confirm or ask next question
           if (session.stage === "confirm") {
             if (userMessage.toLowerCase() === "confirm") {
               try {
@@ -148,7 +139,6 @@ app.post("/webhook", async (req, res) => {
 👉 Escribe *confirm* para guardar o *cancel* para comenzar otra vez.`;
             }
           } else {
-            // 🎭 Ask next missing piece of data in Pelukita’s voice
             const pelukitaResponse = await openai.chat.completions.create({
               model: "gpt-4",
               messages: [
