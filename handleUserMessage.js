@@ -100,6 +100,12 @@ Al final, da una despedida feliz Y luego ese bloque JSON.
     numeroninos: "children",
     numerodeninos: "children",
     numberofkids: "children",
+    childrenamount: "children",
+
+    paquete: "package",
+    adicionales: "extras",
+    adicional: "extras",
+    extras: "extras",
     paquete: "package",
     adicionales: "extras",
     precio: "price",
