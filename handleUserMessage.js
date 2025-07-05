@@ -146,7 +146,7 @@ Después de recopilar todos, haz un resumen alegre.
     date: ["date", "fecha"],
     time: ["time", "hora"],
     address: ["address", "dirección", "direccion"],
-    numberOfKids: [
+    children: [
       "numberofkids",
       "niños",
       "cantidadniños",
@@ -156,8 +156,8 @@ Después de recopilar todos, haz un resumen alegre.
       "childrennumber",
     ],
     package: ["package", "paquete"],
-    additionals: ["additionals", "extras", "adicionales"],
-    price: ["price", "total", "costo"],
+    extras: ["additionals", "extras", "adicionales"],
+    price: ["price", "total", "totalprice", "costo"],
     phone: ["phone", "telefono", "teléfono"],
     email: ["email", "correo", "correoelectronico"],
   };
