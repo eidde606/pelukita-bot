@@ -72,44 +72,22 @@ async function handleUserMessage(senderId, userMessage) {
       {
         role: "system",
         content: `
-Eres Pelukita, una payasita alegre, carismática y profesional que ofrece experiencias divertidas para cumpleaños. Hablas en Spanglish, español o inglés, según cómo te escriba el cliente.
+Eres Pelukita, una payasita alegre, carismática y profesional. Solo responde usando los nombres EXACTOS de los campos de nuestra base de datos como estos:
 
-Tu contacto oficial es:
-📞 Teléfono: 804-735-8835
+- name
+- birthdayName
+- birthdayAge
+- date
+- time
+- address
+- numberOfKids
+- package
+- additionals
+- price
+- phone
+- email
 
-🎉 *Paquete Pelukines* – $650 – Ideal para fiestas en casa:
-- 1 hora de pinta caritas para todos los niños.
-- 2 horas de show interactivo: juegos, concursos, rompe piñata, happy birthday.
-- Parlante incluido.
-
-Adicionales:
-🧸 Muñeco gigante: $60  
-🍿 Carrito popcorn o algodón (50 unidades): $200  
-🎧 DJ adicional (4 horas): $1000
-
-🎊 *Paquete Pelukones* – $1500 – Ideal para fiestas en local:
-Todo lo del Pelukines MÁS:  
-🧸 Muñeco gigante incluido  
-🍭 Popcorn y algodón incluidos (50 unidades)  
-🎧 DJ profesional (4 horas)
-
-Tu tarea es recopilar estos datos, uno por uno:
-- Nombre del adulto
-- Nombre del cumpleañero
-- Edad del cumpleañero
-- Fecha
-- Hora
-- Dirección
-- Número de niños
-- Paquete
-- Adicionales (si hay)
-- Precio total
-- Teléfono
-- Correo electrónico
-
-Después de recopilar todos, haz un resumen alegre.
-
-⚠️ Si el cliente responde con algo como “sí”, “todo bien”, “correcto”, etc., repite toda la información que recopilaste en este formato exacto:
+Si haces un resumen o confirmación final, usa estos nombres *sin cambiar ninguno*. Ejemplo:
 
 \`\`\`json
 [
@@ -121,8 +99,8 @@ Después de recopilar todos, haz un resumen alegre.
 ]
 \`\`\`
 
-✅ NO OMITAS NINGUNO. NUNCA pongas solo \`{ "action": "finalize" }\` sin los otros campos.
-`.trim(),
+Nunca uses nombres como “cumpleañero” o “correo”. Siempre usa los nombres exactos que te dimos arriba.
+        `.trim(),
       },
       ...messages,
     ],
@@ -133,54 +111,9 @@ Después de recopilar todos, haz un resumen alegre.
   const toolCalls = extractAllJson(reply);
   console.log("ToolCalls parsed:", toolCalls);
 
-  const keyMap = {
-    name: ["name", "nombre"],
-    birthdayName: [
-      "birthdayname",
-      "cumpleañero",
-      "cumpleañera",
-      "cumpleanos",
-      "nombrecumple",
-    ],
-    birthdayAge: ["birthdayage", "edad", "edadcumple"],
-    date: ["date", "fecha"],
-    time: ["time", "hora"],
-    address: ["address", "dirección", "direccion"],
-    children: [
-      "numberofkids",
-      "niños",
-      "cantidadniños",
-      "kids",
-      "cantidaddeniños",
-      "children",
-      "childrennumber",
-    ],
-    package: ["package", "paquete"],
-    extras: ["additionals", "extras", "adicionales"],
-    price: ["price", "total", "totalprice", "costo"],
-    phone: ["phone", "telefono", "teléfono"],
-    email: ["email", "correo", "correoelectronico"],
-  };
-
-  const normalizeKey = (key) => {
-    const cleanKey = key.toLowerCase().replace(/\s|_/g, "");
-    for (const [normalized, aliases] of Object.entries(keyMap)) {
-      if (
-        aliases.some(
-          (alias) => cleanKey === alias.toLowerCase().replace(/\s|_/g, "")
-        )
-      ) {
-        return normalized;
-      }
-    }
-    return cleanKey;
-  };
-
   for (const toolCall of toolCalls) {
     if (toolCall?.field && toolCall.value !== undefined) {
-      const normalized = normalizeKey(toolCall.field);
-
-      if (normalized === "date") {
+      if (toolCall.field === "date") {
         try {
           const year = new Date().getFullYear();
           const dateResponse = await openai.chat.completions.create({
@@ -203,7 +136,7 @@ Después de recopilar todos, haz un resumen alegre.
           if (parsedDate.isBefore(moment(), "day")) {
             return "⚠️ Esa fecha ya pasó. Por favor, elige una fecha futura.";
           }
-          session.data[normalized] = parsedDate.format("YYYY-MM-DD");
+          session.data.date = parsedDate.format("YYYY-MM-DD");
           continue;
         } catch (err) {
           console.error("🛑 Error parsing date:", err);
@@ -211,17 +144,17 @@ Después de recopilar todos, haz un resumen alegre.
         }
       }
 
-      if (normalized === "package") {
+      if (toolCall.field === "package") {
         const val = toolCall.value.toLowerCase();
         session.data.package = val.includes("pelukones")
           ? "Pelukones"
           : val.includes("pelukines")
           ? "Pelukines"
           : toolCall.value;
-        continue; // do not overwrite it again below
+        continue;
       }
 
-      session.data[normalized] = toolCall.value;
+      session.data[toolCall.field] = toolCall.value;
     }
   }
 
@@ -232,9 +165,9 @@ Después de recopilar todos, haz un resumen alegre.
     "date",
     "time",
     "address",
-    "children",
+    "numberOfKids",
     "package",
-    "extras",
+    "additionals",
     "price",
     "phone",
     "email",
@@ -255,7 +188,7 @@ Después de recopilar todos, haz un resumen alegre.
 
     const expectedPrice = calculatePrice(
       session.data.package,
-      session.data.extras
+      session.data.additionals
     );
     const providedPrice = parseInt(
       (session.data.price || "").toString().replace(/[^\d]/g, ""),
