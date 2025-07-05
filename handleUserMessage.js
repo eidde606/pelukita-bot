@@ -134,33 +134,32 @@ Después de recopilar todos, haz un resumen alegre.
   console.log("ToolCalls parsed:", toolCalls);
 
   const keyMap = {
-    name: ["name", "adultname", "nombre", "adultnombre"],
-    birthdayName: ["birthdayname", "nombrenino", "nombrenio", "birthdaykid"],
-    birthdayAge: ["age", "edad", "birthdayage"],
-    date: ["fecha", "date"],
-    time: ["hora", "time"],
-    address: ["direccion", "address"],
-    children: [
-      "niño",
-      "kids",
-      "children",
-      "ninos",
-      "childrennumber",
+    name: ["name", "nombre"],
+    birthdayName: [
+      "birthdayname",
+      "cumpleañero",
+      "cumpleañera",
+      "cumpleanos",
+      "nombrecumple",
+    ],
+    birthdayAge: ["birthdayage", "edad", "edadcumple"],
+    date: ["date", "fecha"],
+    time: ["time", "hora"],
+    address: ["address", "dirección", "direccion"],
+    numberOfKids: [
       "numberofkids",
+      "niños",
+      "cantidadniños",
+      "kids",
+      "cantidaddeniños",
+      "children",
+      "childrennumber",
     ],
-    package: ["paquete", "package", "plan", "combo"],
-    extras: [
-      "extra",
-      "addon",
-      "adicional",
-      "extras",
-      "adicionales",
-      "additional",
-      "additionals",
-    ],
-    price: ["precio", "totalprice", "price", "monto", "costo"],
-    phone: ["telefono", "phone", "celular"],
-    email: ["correo", "email", "correo electrónico"],
+    package: ["package", "paquete"],
+    additionals: ["additionals", "extras", "adicionales"],
+    price: ["price", "total", "costo"],
+    phone: ["phone", "telefono", "teléfono"],
+    email: ["email", "correo", "correoelectronico"],
   };
 
   const normalizeKey = (key) => {
