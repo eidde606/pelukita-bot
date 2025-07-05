@@ -171,10 +171,7 @@ Después de recopilar todos, haz un resumen alegre.
                 role: "system",
                 content: `You are a date formatter. Convert the following human date (in Spanish or English) into strict format YYYY-MM-DD. If the user does not provide a year, assume it is ${year}. Only return the date in that format. No explanations. No quotes. No extra text.`,
               },
-              {
-                role: "user",
-                content: toolCall.value,
-              },
+              { role: "user", content: toolCall.value },
             ],
             temperature: 0,
           });
@@ -195,23 +192,23 @@ Después de recopilar todos, haz un resumen alegre.
           session.data[normalized] = parsedDate.format("YYYY-MM-DD");
           continue;
         } catch (error) {
-          console.error("🛑 Error usando GPT para analizar la fecha:", error);
+          console.error("🛑 Error using GPT to parse date:", error);
           return "😔 Lo siento, hubo un problema entendiendo la fecha. Intenta otra vez.";
         }
       }
 
+      // Normalize and store package name correctly
       if (normalized === "package") {
         const val = toolCall.value.toLowerCase();
-        if (val.includes("pelukones")) {
-          session.data.package = "Pelukones";
-        } else if (val.includes("pelukines")) {
-          session.data.package = "Pelukines";
-        } else {
-          session.data.package = toolCall.value;
-        }
-        continue;
+        session.data.package = val.includes("pelukones")
+          ? "Pelukones"
+          : val.includes("pelukines")
+          ? "Pelukines"
+          : toolCall.value;
+        console.log("✅ Detected package:", session.data.package);
       }
 
+      // Save all normalized fields to session data
       session.data[normalized] = toolCall.value;
     }
   }
