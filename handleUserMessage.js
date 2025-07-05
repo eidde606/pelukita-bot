@@ -213,7 +213,7 @@ Después de recopilar todos, haz un resumen alegre.
           : val.includes("pelukines")
           ? "Pelukines"
           : toolCall.value;
-        continue;
+        continue; // do not overwrite it again below
       }
 
       session.data[normalized] = toolCall.value;
@@ -253,7 +253,7 @@ Después de recopilar todos, haz un resumen alegre.
       session.data.extras
     );
     const providedPrice = parseInt(
-      session.data.price.toString().replace(/[^\d]/g, ""),
+      (session.data.price || "").toString().replace(/[^\d]/g, ""),
       10
     );
 
