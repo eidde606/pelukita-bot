@@ -8,7 +8,7 @@ moment.locale("es");
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-function calculatePrice(selectedpackage, extras) {
+function calculatePrice(selectedPackage, extras) {
   const prices = {
     Pelukines: 650,
     Pelukones: 1500,
@@ -17,23 +17,28 @@ function calculatePrice(selectedpackage, extras) {
     cottonCandy: 200,
     dj: 1000,
   };
+
   let total =
-    selectedpackage === "Pelukones" ? prices.Pelukones : prices.Pelukines;
+    selectedPackage === "Pelukones" ? prices.Pelukones : prices.Pelukines;
+
   if (extras) {
     const extrasArray = Array.isArray(extras)
       ? extras
+      : extras.toLowerCase().includes("ninguno")
+      ? []
       : extras.split(",").map((e) => e.trim());
+
     if (extrasArray.includes("giantMascot")) total += prices.giantMascot;
     if (extrasArray.includes("popcorn")) total += prices.popcorn;
     if (extrasArray.includes("cottonCandy")) total += prices.cottonCandy;
     if (extrasArray.includes("dj")) total += prices.dj;
   }
+
   return total;
 }
 
 async function handleUserMessage(senderId, userMessage) {
   let session = await Session.findOne({ senderId });
-
   if (!session) {
     session = await Session.create({
       senderId,
@@ -62,15 +67,16 @@ Tu contacto oficial es:
 - 1 hora de pinta caritas para todos los niños.
 - 2 horas de show interactivo: juegos, concursos, rompe piñata, happy birthday.
 - Parlante incluido.
+
 Adicionales:
-🧸 Muñeco gigante: $60
-🍿 Carrito popcorn o algodón (50 unidades): $200
+🧸 Muñeco gigante: $60  
+🍿 Carrito popcorn o algodón (50 unidades): $200  
 🎧 DJ adicional (4 horas): $1000
 
 🎊 *Paquete Pelukones* – $1500 – Ideal para fiestas en local:
-Todo lo del Pelukines MÁS:
-🧸 Muñeco gigante incluido
-🍭 Popcorn y algodón incluidos (50 unidades)
+Todo lo del Pelukines MÁS:  
+🧸 Muñeco gigante incluido  
+🍭 Popcorn y algodón incluidos (50 unidades)  
 🎧 DJ profesional (4 horas)
 
 Tu tarea es recopilar estos datos, uno por uno:
@@ -146,9 +152,7 @@ Después de recopilar todos, haz un resumen alegre.
   const normalizeKey = (key) => {
     const lowerKey = key.toLowerCase().replace(/\s|_/g, "");
     for (const [normalized, aliases] of Object.entries(keyMap)) {
-      if (aliases.some((alias) => lowerKey.includes(alias))) {
-        return normalized;
-      }
+      if (aliases.some((alias) => lowerKey.includes(alias))) return normalized;
     }
     return lowerKey;
   };
@@ -191,7 +195,7 @@ Después de recopilar todos, haz un resumen alegre.
           session.data[normalized] = parsedDate.format("YYYY-MM-DD");
           continue;
         } catch (error) {
-          console.error("🛑 Error using GPT to parse date:", error);
+          console.error("🛑 Error usando GPT para analizar la fecha:", error);
           return "😔 Lo siento, hubo un problema entendiendo la fecha. Intenta otra vez.";
         }
       }
@@ -205,7 +209,6 @@ Después de recopilar todos, haz un resumen alegre.
         } else {
           session.data.package = toolCall.value;
         }
-        console.log("✅ Detected package:", session.data.package);
         continue;
       }
 
@@ -230,7 +233,7 @@ Después de recopilar todos, haz un resumen alegre.
   const missing = requiredFields.filter((field) => !session.data[field]);
 
   const isFinalConfirmation =
-    /^(sí|si|ok|vale|correcto|está (correcto|bien|perfecto)|todo (bien|está bien|está perfecto))$/i.test(
+    /^(sí|si|ok|vale|correcto|todo (bien|perfecto)|está (bien|correcto|perfecto))$/i.test(
       userMessage.trim()
     );
 
@@ -245,7 +248,6 @@ Después de recopilar todos, haz un resumen alegre.
       session.data.package,
       session.data.extras
     );
-
     const providedPrice = parseInt(
       session.data.price.toString().replace(/[^\d]/g, ""),
       10
@@ -295,8 +297,7 @@ function extractAllJson(text) {
         const parsed = JSON.parse(str);
         if (parsed.field || parsed.action) return parsed;
         return null;
-      } catch (error) {
-        console.warn("Invalid JSON detected:", str, error);
+      } catch {
         return null;
       }
     })
