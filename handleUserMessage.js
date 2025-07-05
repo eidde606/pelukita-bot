@@ -158,67 +158,42 @@ Después de recopilar todos, haz un resumen alegre.
       const normalized = normalizeKey(toolCall.field);
 
       if (normalized === "date") {
-        let input = toolCall.value.trim().toLowerCase();
-        input = input.charAt(0).toUpperCase() + input.slice(1);
+        try {
+          const dateResponse = await openai.chat.completions.create({
+            model: "gpt-4",
+            messages: [
+              {
+                role: "system",
+                content:
+                  "You are a date formatter. Convert the following human date (in Spanish or English) into strict YYYY-MM-DD format. Only return the date in that format. No explanations. No quotes. No extra text.",
+              },
+              {
+                role: "user",
+                content: toolCall.value,
+              },
+            ],
+            temperature: 0,
+          });
 
-        const monthMap = {
-          enero: "January",
-          febrero: "February",
-          marzo: "March",
-          abril: "April",
-          mayo: "May",
-          junio: "June",
-          julio: "July",
-          agosto: "August",
-          septiembre: "September",
-          octubre: "October",
-          noviembre: "November",
-          diciembre: "December",
-        };
+          const cleanDate = dateResponse.choices[0].message.content.trim();
+          const parsedDate = moment(cleanDate, "YYYY-MM-DD", true);
 
-        for (const [es, en] of Object.entries(monthMap)) {
-          if (input.includes(es)) {
-            input = input.replace(es, en);
-            break;
+          console.log("📅 GPT date parsed:", cleanDate);
+
+          if (!parsedDate.isValid()) {
+            return "⚠️ La fecha no se pudo entender. Por favor, escribe una fecha como '11 de noviembre'.";
           }
-        }
 
-        if (!/\d{4}/.test(input)) {
-          input += ` ${new Date().getFullYear()}`;
-        }
+          if (parsedDate.isBefore(moment(), "day")) {
+            return "⚠️ Esa fecha ya pasó. Por favor, elige una fecha futura.";
+          }
 
-        let parsedDate = moment(
-          input,
-          [
-            "D MMMM YYYY",
-            "DD MMMM YYYY",
-            "MMMM D YYYY",
-            "MMMM DD YYYY",
-            "D [de] MMMM [de] YYYY",
-            "MMMM [de] D [de] YYYY",
-          ],
-          true
-        );
-
-        if (!parsedDate.isValid()) {
-          const flipped = input.split(" ").reverse().join(" ");
-          parsedDate = moment(
-            flipped,
-            ["D MMMM YYYY", "MMMM D YYYY", "DD MMMM YYYY", "MMMM DD YYYY"],
-            true
-          );
+          session.data[normalized] = parsedDate.format("YYYY-MM-DD");
+          continue;
+        } catch (error) {
+          console.error("🛑 Error using GPT to parse date:", error);
+          return "😔 Lo siento, hubo un problema entendiendo la fecha. Intenta otra vez.";
         }
-
-        // ✅ only reject if user actually just sent a date
-        if (!parsedDate.isValid()) {
-          return "⚠️ La fecha proporcionada no es válida. Por favor, escribe una fecha como '11 de noviembre'.";
-        }
-        if (parsedDate.isBefore(moment(), "day")) {
-          return "⚠️ Esa fecha ya pasó. Por favor, ingresa una fecha futura.";
-        }
-
-        session.data[normalized] = parsedDate.format("YYYY-MM-DD");
-        continue;
       }
 
       if (normalized === "package") {
