@@ -164,11 +164,17 @@ Después de recopilar todos, haz un resumen alegre.
   };
 
   const normalizeKey = (key) => {
-    const lowerKey = key.toLowerCase().replace(/\s|_/g, "");
+    const cleanKey = key.toLowerCase().replace(/\s|_/g, "");
     for (const [normalized, aliases] of Object.entries(keyMap)) {
-      if (aliases.some((alias) => lowerKey.includes(alias))) return normalized;
+      if (
+        aliases.some(
+          (alias) => cleanKey === alias.toLowerCase().replace(/\s|_/g, "")
+        )
+      ) {
+        return normalized;
+      }
     }
-    return lowerKey;
+    return cleanKey;
   };
 
   for (const toolCall of toolCalls) {
