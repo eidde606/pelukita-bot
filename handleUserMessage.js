@@ -217,8 +217,15 @@ Nunca uses nombres como “cumpleañero” o “correo”. Siempre usa los nombr
     }
   }
 
-  session.messages = messages;
-  await session.save();
+  const sessionExists = await Session.exists({ senderId });
+  if (sessionExists) {
+    session.messages = messages;
+    try {
+      await session.save();
+    } catch (err) {
+      console.error("❌ Failed to save session:", err.message);
+    }
+  }
 
   const cleaned = reply
     .replace(/\{[^{}]*\}/g, "")
