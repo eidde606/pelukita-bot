@@ -37,6 +37,21 @@ function calculatePrice(selectedPackage, extras) {
   return total;
 }
 
+function extractAllJson(text) {
+  const jsonMatches = text.match(/\{[^{}]*\}/g) || [];
+  return jsonMatches
+    .map((str) => {
+      try {
+        const parsed = JSON.parse(str);
+        if (parsed.field || parsed.action) return parsed;
+        return null;
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+}
+
 async function handleUserMessage(senderId, userMessage) {
   let session = await Session.findOne({ senderId });
   if (!session) {
@@ -47,7 +62,6 @@ async function handleUserMessage(senderId, userMessage) {
       data: {},
     });
   }
-
   if (!session.data) session.data = {};
   const messages = session.messages || [];
   messages.push({ role: "user", content: userMessage });
@@ -178,26 +192,20 @@ Después de recopilar todos, haz un resumen alegre.
 
           const cleanDate = dateResponse.choices[0].message.content.trim();
           const parsedDate = moment(cleanDate, "YYYY-MM-DD", true);
-
-          console.log("📅 GPT date parsed:", cleanDate);
-
           if (!parsedDate.isValid()) {
             return "⚠️ La fecha no se pudo entender. Por favor, escribe una fecha como '11 de noviembre'.";
           }
-
           if (parsedDate.isBefore(moment(), "day")) {
             return "⚠️ Esa fecha ya pasó. Por favor, elige una fecha futura.";
           }
-
           session.data[normalized] = parsedDate.format("YYYY-MM-DD");
           continue;
-        } catch (error) {
-          console.error("🛑 Error using GPT to parse date:", error);
-          return "😔 Lo siento, hubo un problema entendiendo la fecha. Intenta otra vez.";
+        } catch (err) {
+          console.error("🛑 Error parsing date:", err);
+          return "😔 Lo siento, hubo un problema entendiendo la fecha.";
         }
       }
 
-      // Normalize and store package name correctly
       if (normalized === "package") {
         const val = toolCall.value.toLowerCase();
         session.data.package = val.includes("pelukones")
@@ -205,10 +213,9 @@ Después de recopilar todos, haz un resumen alegre.
           : val.includes("pelukines")
           ? "Pelukines"
           : toolCall.value;
-        console.log("✅ Detected package:", session.data.package);
+        continue;
       }
 
-      // Save all normalized fields to session data
       session.data[normalized] = toolCall.value;
     }
   }
@@ -256,19 +263,16 @@ Después de recopilar todos, haz un resumen alegre.
 
     if (missing.length === 0) {
       const bookingData = { ...session.data, status: "Booked" };
-      console.log("✅ Final bookingData to be saved:", bookingData);
-
       try {
         await Booking.create(bookingData);
         await sendEmail(bookingData.email, bookingData);
         await Session.deleteOne({ senderId });
         return "🎉 ¡Gracias por reservar con Pelukita! 🎈 Tu evento ha sido guardado con éxito y te hemos enviado un correo de confirmación. ¡Va a ser una fiesta brutal!";
-      } catch (error) {
-        console.error("Error finalizing booking:", error);
-        return "😔 ¡Lo siento! Hubo un problema al procesar tu reserva. Por favor, intenta de nuevo o contáctanos al 804-735-8835.";
+      } catch (err) {
+        console.error("❌ Error finalizing booking:", err);
+        return "😔 ¡Lo siento! Hubo un problema al procesar tu reserva.";
       }
     } else {
-      console.log("❌ Cannot finalize. Missing:", missing);
       return `⚠️ Falta información: ${missing.join(
         ", "
       )}. ¿Puedes completarla?`;
@@ -282,23 +286,7 @@ Después de recopilar todos, haz un resumen alegre.
     .replace(/\{[^{}]*\}/g, "")
     .replace(/^[,\s\n\r]+$/gm, "")
     .trim();
-
   return cleaned;
-}
-
-function extractAllJson(text) {
-  const jsonMatches = text.match(/\{[^{}]*\}/g) || [];
-  return jsonMatches
-    .map((str) => {
-      try {
-        const parsed = JSON.parse(str);
-        if (parsed.field || parsed.action) return parsed;
-        return null;
-      } catch {
-        return null;
-      }
-    })
-    .filter(Boolean);
 }
 
 module.exports = handleUserMessage;
