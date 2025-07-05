@@ -159,13 +159,13 @@ Después de recopilar todos, haz un resumen alegre.
 
       if (normalized === "date") {
         try {
+          const year = new Date().getFullYear();
           const dateResponse = await openai.chat.completions.create({
             model: "gpt-4",
             messages: [
               {
                 role: "system",
-                content:
-                  "You are a date formatter. Convert the following human date (in Spanish or English) into strict YYYY-MM-DD format. Only return the date in that format. No explanations. No quotes. No extra text.",
+                content: `You are a date formatter. Convert the following human date (in Spanish or English) into strict format YYYY-MM-DD. If the user does not provide a year, assume it is ${year}. Only return the date in that format. No explanations. No quotes. No extra text.`,
               },
               {
                 role: "user",
