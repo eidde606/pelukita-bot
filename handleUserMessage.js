@@ -3,6 +3,7 @@ const Session = require("./Session");
 const Booking = require("./Booking");
 const sendEmail = require("./sendEmail");
 const moment = require("moment");
+const twilio = require("twilio");
 require("moment/locale/es");
 moment.locale("es");
 
@@ -245,6 +246,13 @@ Incluye siempre esto al final:
       try {
         await Booking.create(bookingData);
         await sendEmail(bookingData.email, bookingData);
+
+        await twilioClient.messages.create({
+          from: "whatsapp:+14155238886", // Twilio sandbox number
+          to: "whatsapp:+18045287612", // Replace with Pelukita’s number
+          body: `🎉 Nueva reservación:\n👤 Nombre: ${bookingData.name}\n🎈 Paquete: ${bookingData.package}\n📅 Fecha: ${bookingData.date}\n🕒 Hora: ${bookingData.time}\n📍 Dirección: ${bookingData.address}\n📞 Teléfono: ${bookingData.phone}\n💰 Precio: ${bookingData.price}`,
+        });
+
         await Session.deleteOne({ senderId });
         return "🎉 ¡Gracias por reservar con Pelukita! 🎈 Tu evento ha sido guardado con éxito y te hemos enviado un correo de confirmación. ¡Va a ser una fiesta brutal!";
       } catch (err) {
