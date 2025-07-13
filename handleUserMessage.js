@@ -233,7 +233,7 @@ Incluye siempre esto al final:
       session.data.additionals
     );
     const providedPrice = parseInt(
-      (session.data.price || "").toString().replace(/[^\d]/g, ""),
+      (session.data.price || "").toString().match(/^\d+/)?.[0] || "0",
       10
     );
 
