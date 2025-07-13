@@ -5,7 +5,7 @@ const client = new Twilio(
   process.env.TWILIO_AUTH_TOKEN
 );
 
-async function sendWhatsAppMessage(to, message) {
+async function sendWhatsAppMessage({ date, time }) {
   try {
     const response = await client.messages.create({
       from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,

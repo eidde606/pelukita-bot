@@ -251,7 +251,7 @@ Incluye siempre esto al final:
         await Booking.create(bookingData);
         await sendEmail(bookingData.email, bookingData);
 
-        await sendWhatsAppMessage(bookingData.date, bookingData.time);
+        await sendWhatsAppMessage(bookingData);
 
         await Session.deleteOne({ senderId });
         return "🎉 ¡Gracias por reservar con Pelukita! 🎈 Tu evento ha sido guardado con éxito y te hemos enviado un correo de confirmación. ¡Va a ser una fiesta brutal!";
