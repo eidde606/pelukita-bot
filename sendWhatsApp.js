@@ -9,7 +9,8 @@ async function sendWhatsAppMessage({ date, time }) {
   try {
     const response = await client.messages.create({
       from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
-      to: process.env.PELUKITA_WHATSAPP_NUMBER,
+      to: `whatsapp:${process.env.PELUKITA_WHATSAPP_NUMBER}`,
+
       contentSid: "HXb5b62575e6e4ff6129ad7c8efe1f983e",
       contentVariables: JSON.stringify({
         1: date,
