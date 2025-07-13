@@ -9,34 +9,38 @@ moment.locale("es");
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-function calculatePrice(selectedPackage, extras) {
+const calculatePrice = (selectedPackage, extras) => {
   const prices = {
     Pelukines: 650,
     Pelukones: 1500,
-    giantMascot: 60,
+    giantMascot: 600,
     popcorn: 200,
     cottonCandy: 200,
-    dj: 1000,
+    dj: 150,
   };
 
   let total =
     selectedPackage === "Pelukones" ? prices.Pelukones : prices.Pelukines;
 
-  if (extras) {
-    const extrasArray = Array.isArray(extras)
-      ? extras
-      : extras.toLowerCase().includes("ninguno")
+  const extrasArray = Array.isArray(extras)
+    ? extras
+    : typeof extras === "string"
+    ? extras.toLowerCase().includes("ninguno")
       ? []
-      : extras.split(",").map((e) => e.trim());
+      : extras.split(",").map((e) => e.trim().toLowerCase())
+    : [];
 
-    if (extrasArray.includes("giantMascot")) total += prices.giantMascot;
-    if (extrasArray.includes("popcorn")) total += prices.popcorn;
-    if (extrasArray.includes("cottonCandy")) total += prices.cottonCandy;
-    if (extrasArray.includes("dj")) total += prices.dj;
-  }
+  if (extrasArray.includes("giant mascot")) total += prices.giantMascot;
+  if (extrasArray.includes("popcorn")) total += prices.popcorn;
+  if (
+    extrasArray.includes("cotton candy") ||
+    extrasArray.includes("máquina de algodón")
+  )
+    total += prices.cottonCandy;
+  if (extrasArray.includes("dj")) total += prices.dj;
 
   return total;
-}
+};
 
 function extractAllJson(text) {
   const jsonMatches = text.match(/\{[^{}]*\}/g) || [];
@@ -233,7 +237,7 @@ Incluye siempre esto al final:
       session.data.additionals
     );
     const providedPrice = parseInt(
-      (session.data.price || "").toString().match(/^\d+/)?.[0] || "0",
+      (session.data.price || "").toString().match(/\d+/)?.[0] || "0",
       10
     );
 
