@@ -22,19 +22,36 @@ const calculatePrice = (selectedPackage, extras) => {
   let total =
     selectedPackage === "Pelukones" ? prices.Pelukones : prices.Pelukines;
 
+  const normalize = (text = "") =>
+    text
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+
   const extrasArray = Array.isArray(extras)
-    ? extras
+    ? extras.map((e) => normalize(e))
     : typeof extras === "string"
-    ? extras.toLowerCase().includes("ninguno")
+    ? normalize(extras).includes("ninguno")
       ? []
-      : extras.split(",").map((e) => e.trim().toLowerCase())
+      : normalize(extras)
+          .split(",")
+          .map((e) => e.trim())
     : [];
 
-  if (extrasArray.includes("giant mascot")) total += prices.giantMascot;
-  if (extrasArray.includes("popcorn")) total += prices.popcorn;
+  if (
+    extrasArray.includes("giant mascot") ||
+    extrasArray.includes("personaje gigante")
+  )
+    total += prices.giantMascot;
+  if (
+    extrasArray.includes("popcorn") ||
+    extrasArray.includes("maquina de popcorn")
+  )
+    total += prices.popcorn;
   if (
     extrasArray.includes("cotton candy") ||
-    extrasArray.includes("máquina de algodón")
+    extrasArray.includes("máquina de algodón") ||
+    extrasArray.includes("maquina de algodon")
   )
     total += prices.cottonCandy;
   if (extrasArray.includes("dj")) total += prices.dj;
