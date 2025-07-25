@@ -38,8 +38,10 @@ Collect these fields naturally:
 - email
 - address
 
-Once everything is collected, respond ONLY with this format:
-{ "action": "finalize", "name": "...", "date": "...", "time": "...", "service": "...", "price": "...", "phone": "...", "email": "...", "address": "..." }
+Once everything is collected, respond ONLY with this format:Once everything is collected, respond ONLY with this format:
+{{ "action": "finalize", "name": "...", "date": "...", "time": "...", "service": "...", "price": "...", "phone": "...", "email": "...", "address": "..." }}
+
+
 
 Never explain the JSON. Just send it once complete.
 """
