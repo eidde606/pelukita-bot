@@ -41,7 +41,7 @@ We look forward to celebrating with you!
         print("❌ Error sending email to client:", e)
 
 
-def send_email_to_me(name, email, date, time, service, price, address):
+def send_email_to_me(name, email, date, time, service, price, address, phone):
     if not user or not password:
         print("❌ Missing Gmail credentials for internal email.")
         return
@@ -57,6 +57,7 @@ You just received a new reservation from Messenger.
 🎈 Service: {service}
 💰 Price: {price}
 📍 Address: {address}
+📞 Phone: {phone}
 
 Check the schedule and follow up if needed.
 """
