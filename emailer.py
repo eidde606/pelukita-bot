@@ -1,16 +1,16 @@
-# emailer.py
 import os
 import smtplib
 from email.mime.text import MIMEText
-from dotenv import load_dotenv
-
-load_dotenv()
 
 user = os.getenv("GMAIL_USER")
 password = os.getenv("GMAIL_PASS")
 
 
 def send_email_to_client(to_email, name, date, time, service, price, address):
+    if not user or not password:
+        print("❌ Missing Gmail credentials for client email.")
+        return
+
     subject = "🎉 Your Party Reservation with Pelukita is Confirmed!"
     body = f"""
 Hi {name},
@@ -27,7 +27,6 @@ We look forward to celebrating with you!
 
 – Pelukita
 """
-
     msg = MIMEText(body)
     msg["Subject"] = subject
     msg["From"] = user
@@ -43,6 +42,10 @@ We look forward to celebrating with you!
 
 
 def send_email_to_me(name, email, date, time, service, price, address):
+    if not user or not password:
+        print("❌ Missing Gmail credentials for internal email.")
+        return
+
     subject = f"📬 NEW Pelukita Party Booking from {name}"
     body = f"""
 You just received a new reservation from Messenger.
@@ -57,11 +60,10 @@ You just received a new reservation from Messenger.
 
 Check the schedule and follow up if needed.
 """
-
     msg = MIMEText(body)
     msg["Subject"] = subject
     msg["From"] = user
-    msg["To"] = user  # Send to yourself
+    msg["To"] = user
 
     try:
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:

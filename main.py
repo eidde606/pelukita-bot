@@ -6,6 +6,9 @@ from db import get_or_create_session
 from fb import send_facebook_message
 import uvicorn
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN")
 
