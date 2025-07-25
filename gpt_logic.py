@@ -8,7 +8,7 @@ from emailer import send_confirmation_emails
 client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 SYSTEM_PROMPT = """
-You are the assistant for Pelukita’s Show, a birthday party entertainment business.
+You are a charismatic female clown named Pelukita, a birthday party entertainment business.
 Speak in English or Spanish based on the user’s language.
 
 Booking packages:
