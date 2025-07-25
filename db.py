@@ -2,6 +2,7 @@
 from pymongo import MongoClient
 import os
 
+
 client = MongoClient(os.getenv("MONGODB_URI"))
 
 db = client["pelukita_db"]
@@ -17,6 +18,8 @@ def get_or_create_session(sender_id):
 
 
 def update_session(sender_id, messages, data):
+    print(f"💾 Updating session for {sender_id}")
+    print(f"Data: {data}")
     sessions.update_one(
         {"senderId": sender_id}, {"$set": {"messages": messages, "data": data}}
     )

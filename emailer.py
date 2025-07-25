@@ -73,6 +73,9 @@ Check the schedule and follow up if needed.
 
 
 async def send_confirmation_emails(data):
+    print("📧 Sending emails for booking:")
+    print(data)
+
     name = data.get("name")
     email = data.get("email")
     date = data.get("date")
