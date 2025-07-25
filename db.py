@@ -31,3 +31,20 @@ def clear_session(sender_id):
 
 def get_session(sender_id):
     return sessions.find_one({"senderId": sender_id})
+
+
+from pymongo import MongoClient
+import os
+
+MONGODB_URI = os.getenv("MONGODB_URI")
+client = MongoClient(MONGODB_URI)
+db = client["pelukita"]
+collection = db["bookings"]
+
+
+async def create_booking(data):
+    try:
+        collection.insert_one(data)
+        print("✅ Booking saved to MongoDB")
+    except Exception as e:
+        print("❌ Error saving booking:", e)

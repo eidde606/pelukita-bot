@@ -2,7 +2,7 @@
 import os
 import json
 from openai import AsyncOpenAI
-from db import update_session, clear_session, get_session, create_booking
+from db import update_session, clear_session, create_booking
 from emailer import send_confirmation_emails
 
 client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
