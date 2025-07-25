@@ -89,6 +89,6 @@ async def send_confirmation_emails(data):
     phone = data.get("phone")
 
     if email:
-        send_email_to_client(email, name, date, time, service, price, address, phone)
+        send_email_to_client(email, name, date, time, service, price, address)
 
     send_email_to_me(name, email, date, time, service, price, address, phone)
