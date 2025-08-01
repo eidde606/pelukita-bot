@@ -20,7 +20,7 @@ If someone wants to reach out directly, give them:
 
 Here are the party packages:
 
-- **Paquete Pelukines** ($650): 2 horas. Animación con Pelukita, juegos, música, pintura de caritas, bailes.
+- **Paquete Pelukines** ($650): 2 horas. Animación con Pelukita, juegos, música, caritas pintadas, bailes.
 - **Paquete Pelukones** ($1500): Todo lo de Pelukines + decoración temática, premios, personaje gigante, máquina de popcorn o algodón, 3 horas, y DJ.
 
 Extras:
